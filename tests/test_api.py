@@ -418,3 +418,22 @@ async def test_additional_uploads_after_onboarding_and_list_filter(client):
     assert other.json() == []
     login(OTHER)
     assert (await client.get(url + "/leads", params={"import_id": second.json()["id"]})).status_code == 404
+
+
+async def test_saved_handoff_emails_persist_and_are_partner_isolated(client):
+    p = await create(client)
+    url = "/v1/partners/" + p["id"]
+    login(USER)
+    added = await client.post(url + "/handoff-emails", json={"email": " Sales@Example.com "})
+    assert added.status_code == 200 and added.json()["emails"] == ["sales@example.com"]
+    duplicate = await client.post(url + "/handoff-emails", json={"email": "sales@example.com"})
+    assert duplicate.json()["emails"] == ["sales@example.com"]
+    invalid = await client.post(url + "/handoff-emails", json={"email": "not-an-email"})
+    assert invalid.status_code == 422
+    revision = (await client.get(url)).json()["revision"]
+    saved = await client.put(url + "/onboarding", json={"expected_revision": revision, "onboarding": complete()})
+    assert saved.status_code == 200
+    assert (await client.get(url + "/handoff-emails")).json()["emails"] == ["sales@example.com"]
+    login(OTHER)
+    assert (await client.get(url + "/handoff-emails")).status_code == 404
+    assert (await client.post(url + "/handoff-emails", json={"email": "other@example.com"})).status_code == 404

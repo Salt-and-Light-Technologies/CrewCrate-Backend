@@ -1,2 +1,0 @@
-"""CrewCrate API package."""
-

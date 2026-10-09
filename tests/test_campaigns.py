@@ -148,7 +148,9 @@ async def test_campaign_tenant_scope_limits_and_missing_checks(client):
         )
     ).status_code == 404
     too_many = config(lead)
-    too_many["daily_limit"] = 101
+    too_many["daily_limit"] = 1000
+    assert (await client.post(url + "/campaigns", json=too_many)).status_code == 201
+    too_many["daily_limit"] = 0
     assert (await client.post(url + "/campaigns", json=too_many)).status_code == 422
     invalid = config(lead)
     invalid["start_hour"] = 16

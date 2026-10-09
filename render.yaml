@@ -12,9 +12,5 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: SUPABASE_SECRET_KEY
-        sync: false
-      - key: SUPABASE_STORAGE_BUCKET
-        value: crewcrate_media
-      - key: AUTO_CREATE_SCHEMA
-        value: "false"
+      - key: ALLOWED_ORIGINS
+        value: ""

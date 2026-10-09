@@ -395,3 +395,26 @@ async def test_preview_rejects_ambiguous_mapping(client, headers, mapping):
         files={"file": ("a.csv", (headers + "\n1234567,Alpha").encode(), "text/csv")},
     )
     assert response.status_code == 422
+
+
+async def test_additional_uploads_after_onboarding_and_list_filter(client):
+    p = await create(client)
+    pid = p["id"]
+    url = "/v1/partners/" + pid
+    login(USER)
+    assert (await client.put(url + "/onboarding", json={"expected_revision": 0, "onboarding": complete()})).status_code == 200
+    assert (await client.post(url + "/submit", json={"expected_revision": 1})).status_code == 200
+    first = await upload(client, pid, 2, b"Phone,Name\n+12025550101,First\n")
+    assert first.status_code == 201, first.text
+    second = await upload(client, pid, 3, b"Phone,Name\n+12025550102,Second\n")
+    assert second.status_code == 201, second.text
+    batches = (await client.get(url + "/imports")).json()
+    assert len(batches) == 2
+    selected = await client.get(url + "/leads", params={"import_id": second.json()["id"]})
+    assert selected.status_code == 200
+    assert len(selected.json()) == 1 and selected.json()[0]["name"] == "Second"
+    assert (await client.get(url)).json()["status"] == "submitted"
+    other = await client.get(url + "/leads", params={"import_id": str(uuid.uuid4())})
+    assert other.json() == []
+    login(OTHER)
+    assert (await client.get(url + "/leads", params={"import_id": second.json()["id"]})).status_code == 404

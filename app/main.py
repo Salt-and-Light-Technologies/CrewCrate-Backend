@@ -218,8 +218,8 @@ async def import_leads(
         await file.close()
     partner = await accessible_partner(partner_id, actor, session, lock=True)
     check_revision(partner, expected_revision)
-    if partner.status not in ("draft", "changes_requested"):
-        raise HTTPException(409, "Import leads before submitting onboarding")
+    if partner.status == "paused":
+        raise HTTPException(409, "CSV uploads are unavailable while the partner is paused")
     existing = set((await session.scalars(select(Lead.phone).where(Lead.partner_id == partner_id))).all())
     accepted, duplicates, _ = preview_rows(parsed, existing)
     # Persist summaries and normalized contacts only; original files are discarded.
@@ -279,9 +279,12 @@ async def leads(
     offset: int = Query(0, ge=0),
     status: LeadStatus | None = None,
     search: str = Query("", max_length=200),
+    import_id: uuid.UUID | None = None,
 ):
     await accessible_partner(partner_id, actor, session)
     query = select(Lead).where(Lead.partner_id == partner_id)
+    if import_id:
+        query = query.where(Lead.import_id == import_id)
     if status:
         query = query.where(Lead.status == status.value)
     if search.strip():
@@ -391,8 +394,8 @@ async def preview_import(
     email_column: str | None = Form(default=None, max_length=200),
 ):
     partner = await accessible_partner(partner_id, actor, session)
-    if partner.status not in ("draft", "changes_requested"):
-        raise HTTPException(409, "Import leads before submitting onboarding")
+    if partner.status == "paused":
+        raise HTTPException(409, "CSV uploads are unavailable while the partner is paused")
     try:
         parsed = parse_csv(await file.read(MAX_BYTES + 1), phone_column, name_column, email_column)
     finally:

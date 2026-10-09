@@ -71,7 +71,7 @@ async def campaign_read(partner, campaign, session):
     blockers = launch_issues(partner, all_count)
     if partner.status != "pilot_approved":
         blockers.append("Partner setup must be pilot approved")
-    for field in ("offer", "message_template", "qualification"):
+    for field in ("offer", "qualification"):
         if not getattr(config, field).strip():
             blockers.append("Complete " + field.replace("_", " "))
     if not email_valid(config.handoff_email):
@@ -80,7 +80,9 @@ async def campaign_read(partner, campaign, session):
         ZoneInfo(config.time_zone)
     except (ZoneInfoNotFoundError, ValueError):
         blockers.append("Provide a valid IANA time zone")
-    if config.start_hour >= config.end_hour:
+    if config.end_hour == 17 and (config.end_minute or 0) > 0:
+        blockers.append("Sending window must end by 17:00")
+    if config.start_hour * 60 + (config.start_minute or 0) >= config.end_hour * 60 + (config.end_minute or 0):
         blockers.append("Sending window must end after it starts")
     if len(set(config.lead_ids)) != len(config.lead_ids):
         blockers.append("Select each lead once")

@@ -42,6 +42,8 @@ class Onboarding(BaseModel):
     reporting_system: str = ""
     compensation: str = "revenue"
     commercial_terms: str = ""
+    fee_amount: float | None = Field(default=None, ge=0, le=1_000_000, allow_inf_nan=False)
+    fee_rate: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     attribution_days: int = Field(default=30, ge=1, le=365)
     reporting_days: int = Field(default=7, ge=1, le=90)
     accepts_visibility: bool = False

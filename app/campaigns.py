@@ -151,13 +151,14 @@ async def permission(
     lead.permission_evidence = body.evidence.strip()
     if body.permission == "revoked":
         lead.opted_out = True
+    lead.status = "eligible" if body.permission == "recorded" and not lead.opted_out else "excluded"
     lead.revision += 1
     record_event(
         partner,
         actor,
         "sms_permission_updated",
         partner.status,
-        f"Lead {lead.id}: {body.permission}; evidence: {body.evidence.strip()}",
+        f"Lead {lead.id}: {body.permission}; review status: {lead.status}; evidence: {body.evidence.strip()}",
         session,
     )
     await session.commit()

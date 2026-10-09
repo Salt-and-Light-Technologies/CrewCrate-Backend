@@ -316,6 +316,12 @@ async def lead_status(
         raise HTTPException(409, "Lead changed; refresh before saving")
     if partner.status == "paused":
         raise HTTPException(409, "Partner is paused")
+    automatic_status = (
+        "excluded" if lead.opted_out or lead.sms_permission == "revoked"
+        else "eligible" if lead.sms_permission == "recorded" else None
+    )
+    if automatic_status is not None and body.status.value != automatic_status:
+        raise HTTPException(409, "Review status is determined by this contact's SMS permission and opt-out")
     previous = lead.status
     lead.status = body.status.value
     lead.revision += 1

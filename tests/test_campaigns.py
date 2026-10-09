@@ -115,6 +115,7 @@ async def test_permissions_optouts_and_preparation_invalidation(client):
         json={"expected_revision": 2, "permission": "revoked", "evidence": "Recorded opt-out request"},
     )
     assert revoked.status_code == 200 and revoked.json()["opted_out"]
+    assert revoked.json()["status"] == "excluded"
     snapshot = (await client.get(path)).json()
     assert snapshot["needs_recheck"] and snapshot["recipient_count"] == 0
     assert (await client.post(path + "/prepare", json={"expected_revision": 2})).status_code == 422
@@ -247,3 +248,25 @@ async def test_partner_can_resume_own_pause_and_cannot_bypass_owner_hold(client)
         )
     ).status_code == 403
     assert (await client.get(path)).json()["owner_hold"]
+
+
+@pytest.mark.asyncio
+async def test_recording_permission_automatically_sets_eligibility(client):
+    p = await create(client)
+    assert (await upload(client, p["id"], 0, b"Phone,Name\n12025550103,New contact\n")).status_code == 201
+    url = "/v1/partners/" + p["id"] + "/leads"
+    lead = (await client.get(url)).json()[0]
+    assert lead["status"] == "unreviewed"
+    response = await client.put(url + "/" + lead["id"] + "/sms-permission", json={
+        "expected_revision": lead["revision"], "permission": "recorded", "evidence": "Opt-in record ABC123"
+    })
+    assert response.status_code == 200
+    assert response.json()["status"] == "eligible"
+    assert response.json()["sms_permission"] == "recorded"
+    assert not response.json()["opted_out"]
+
+    conflict = await client.patch(url + "/" + lead["id"], json={
+        "expected_revision": response.json()["revision"], "status": "excluded"
+    })
+    assert conflict.status_code == 409
+    assert (await client.get(url)).json()[0]["status"] == "eligible"

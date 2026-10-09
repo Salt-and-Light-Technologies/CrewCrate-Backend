@@ -186,6 +186,7 @@ class CampaignConfig(BaseModel):
     name: str = Field(min_length=1, max_length=160, pattern=r"\S")
     offer: str = Field(default="", max_length=2000)
     ai_brief: str | None = Field(default=None, max_length=10000)
+    ai_name: str | None = Field(default=None, max_length=100)
     message_template: str = Field(default="", max_length=480)
     qualification: str = Field(default="", max_length=2000)
     handoff_email: str = Field(default="", max_length=320)

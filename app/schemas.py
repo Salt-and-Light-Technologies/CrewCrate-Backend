@@ -34,6 +34,7 @@ class Onboarding(BaseModel):
     sales_contact: str = ""
     booking_url: str = ""
     handoff_email: str = ""
+    handoff_emails: list[str] = Field(default_factory=list)
     response_hours: int = Field(default=24, ge=1, le=168)
     ai_boundaries: str = ""
     lead_source: str = ""
@@ -258,3 +259,8 @@ class ConversationEventRead(ORMModel):
     note: str
     revision: int
     timestamp: datetime
+
+
+class SalesHandoffEmailAdd(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=3, max_length=320)

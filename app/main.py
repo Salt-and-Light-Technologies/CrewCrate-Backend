@@ -17,6 +17,7 @@ from .imports import MAX_BYTES, parse_csv, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
 from .schemas import (
+    SalesHandoffEmailAdd,
     Decision,
     DraftUpdate,
     EventRead,
@@ -32,7 +33,7 @@ from .schemas import (
     ReadinessUpdate,
     RevisionRequest,
 )
-from .workflow import apply_decision, check_revision, launch_issues, onboarding_issues, record_event
+from .workflow import email_valid, apply_decision, check_revision, launch_issues, onboarding_issues, record_event
 
 app = FastAPI(title="CrewCrate Revenue Recovery API", version="0.3.0")
 app.add_middleware(
@@ -126,7 +127,9 @@ async def save_draft(partner_id: uuid.UUID, body: DraftUpdate, actor: User, sess
     if partner.status not in ("draft", "changes_requested"):
         raise HTTPException(409, "Onboarding must be draft or changes requested to edit")
     previous = partner.status
-    partner.onboarding = body.onboarding.model_dump()
+    updated_setup = body.onboarding.model_dump()
+    updated_setup["handoff_emails"] = partner.onboarding.get("handoff_emails", [])
+    partner.onboarding = updated_setup
     if body.onboarding.business_name.strip():
         partner.name = body.onboarding.business_name.strip()[:160]
     # All attestations must be reviewed again after an edit.
@@ -437,3 +440,32 @@ async def lead_activity(
 
 
 app.include_router(campaign_router)
+
+
+def stored_handoff_emails(partner):
+    values = partner.onboarding.get("handoff_emails", [])
+    legacy = partner.onboarding.get("handoff_email", "").strip().lower()
+    if legacy and email_valid(legacy):
+        values = [legacy] + values
+    return list(dict.fromkeys(value.strip().lower() for value in values if email_valid(value.strip())))
+
+
+@app.get("/v1/partners/{partner_id}/handoff-emails")
+async def handoff_emails(partner_id: uuid.UUID, actor: User, session: Session):
+    partner = await accessible_partner(partner_id, actor, session)
+    return {"emails": stored_handoff_emails(partner)}
+
+
+@app.post("/v1/partners/{partner_id}/handoff-emails")
+async def add_handoff_email(partner_id: uuid.UUID, body: SalesHandoffEmailAdd, actor: User, session: Session):
+    partner = await accessible_partner(partner_id, actor, session, lock=True)
+    email = body.email.strip().lower()
+    if not email_valid(email):
+        raise HTTPException(422, "Provide a valid sales handoff email")
+    emails = stored_handoff_emails(partner)
+    if email not in emails:
+        emails.append(email)
+        partner.onboarding = {**partner.onboarding, "handoff_emails": emails}
+        record_event(partner, actor, "sales_handoff_email_added", partner.status, "Saved sales handoff destination", session)
+        await session.commit()
+    return {"emails": emails}

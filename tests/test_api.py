@@ -73,6 +73,7 @@ def complete():
         eligibility_notes="Documented evidence",
         reporting_system="Payments",
         commercial_terms="Proposed terms",
+        fee_rate=10,
         accepts_visibility=True,
         confirms_accuracy=True,
     )

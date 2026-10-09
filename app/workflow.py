@@ -28,9 +28,10 @@ def onboarding_issues(data: dict) -> list[str]:
         "lead_source",
         "eligibility_notes",
         "reporting_system",
-        "commercial_terms",
     ]
     issues = [f"Complete {field.replace('_', ' ')}" for field in required if not getattr(d, field).strip()]
+    if (d.fee_amount or 0) <= 0 and (d.fee_rate or 0) <= 0:
+        issues.append("Choose a fee amount or percentage rate greater than zero")
     for field in ("email", "handoff_email"):
         if not email_valid(getattr(d, field)):
             issues.append(f"Provide valid {field.replace('_', ' ')}")

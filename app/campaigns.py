@@ -603,8 +603,8 @@ async def campaign_import(
     attached = list(dict.fromkeys(body.lead_ids + [existing[c["phone"]].id for c in parsed.contacts]))
     if not parsed.contacts:
         raise HTTPException(422, "No valid leads to add. Fix the file and preview it again.")
-    if len(attached) > 500:
-        raise HTTPException(422, "A campaign supports up to 500 distinct leads. Upload a smaller list.")
+    if len(attached) > 10000:
+        raise HTTPException(422, "A campaign supports up to 10,000 distinct leads. Upload a smaller list.")
     scoped = set(
         (
             await session.scalars(select(Lead.id).where(Lead.partner_id == partner_id, Lead.id.in_(attached)))

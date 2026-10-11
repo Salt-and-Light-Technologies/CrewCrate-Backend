@@ -93,7 +93,7 @@ async def test_oversized_campaign_rolls_back(client):  # noqa: F811
     partner = await create(client)
     login(USER)
     path = f"/v1/partners/{partner['id']}"
-    raw = ('Phone\n' + '\n'.join(str(15550000000 + i) for i in range(501))).encode()
+    raw = ('Phone\n' + '\n'.join(str(15550000000 + i) for i in range(10001))).encode()
     result = await client.post(path + '/campaign-import', files={'file': ('leads.csv', raw)}, data={'config': '{"name":"Too many"}', 'phone_column': 'Phone', 'expected_partner_revision': '0'})
     assert result.status_code == 422
     assert (await client.get(path + '/leads')).json() == []

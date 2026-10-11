@@ -256,7 +256,7 @@ async def test_import_dedup_and_lead_scope(client):
             json={"expected_revision": 1, "status": "excluded"},
         )
     ).status_code == 404
-    assert (await client.get(f"/v1/partners/{p['id']}/leads?limit=101")).status_code == 422
+    assert (await client.get(f"/v1/partners/{p['id']}/leads?limit=251")).status_code == 422
 
 
 @pytest.mark.parametrize(

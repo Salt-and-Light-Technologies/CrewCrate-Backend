@@ -208,7 +208,7 @@ class CampaignConfig(BaseModel):
     end_hour: int = Field(default=17, ge=9, le=17)
     daily_limit: int = Field(default=25, ge=1)
     follow_up_limit: int = Field(default=1, ge=0, le=3)
-    lead_ids: list[uuid.UUID] = Field(default_factory=list, max_length=500)
+    lead_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10000)
 
 
 class CampaignUpdate(RevisionRequest):
@@ -304,7 +304,7 @@ class ContactReview(RevisionRequest):
 
 
 class RecipientSelection(RevisionRequest):
-    lead_ids: list[uuid.UUID] = Field(max_length=500)
+    lead_ids: list[uuid.UUID] = Field(max_length=10000)
 
 
 class RecipientSelectionRead(BaseModel):

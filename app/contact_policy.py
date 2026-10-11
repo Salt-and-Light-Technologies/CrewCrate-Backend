@@ -20,3 +20,15 @@ def exclusion_reasons(lead):
     if not lead.phone.isascii() or not lead.phone.isdigit() or not 7 <= len(lead.phone) <= 15:
         reasons.append("Invalid normalized phone number")
     return reasons
+
+
+def eligible_expression(model):
+    """SQL equivalent of exclusion_reasons, applied before pagination."""
+    from sqlalchemy import and_, func
+
+    remaining = model.phone
+    for digit in "0123456789":
+        remaining = func.replace(remaining, digit, "")
+    return and_(model.opted_out.is_(False), model.sms_permission == "recorded",
+                func.length(func.trim(model.permission_evidence)) >= 8,
+                model.status == "eligible", func.length(model.phone).between(7, 15), remaining == "")

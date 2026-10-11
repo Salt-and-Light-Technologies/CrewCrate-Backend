@@ -12,8 +12,10 @@ from starlette.concurrency import run_in_threadpool
 
 from .ai_tests import router as ai_test_router
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
+from .campaigns import get_campaign
 from .campaigns import router as campaign_router
 from .config import get_settings
+from .contact_policy import eligible_expression
 from .database import get_session
 from .imports import MAX_BYTES, preview_rows
 from .limits import BodyLimitMiddleware
@@ -333,14 +335,22 @@ async def leads(
     partner_id: uuid.UUID,
     actor: User,
     session: Session,
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=250),
     offset: int = Query(0, ge=0),
     status: LeadStatus | None = None,
     search: str = Query("", max_length=200),
     import_id: uuid.UUID | None = None,
+    campaign_id: uuid.UUID | None = None,
+    eligibility: str = Query("all", pattern="^(all|eligible|excluded)$"),
 ):
     await accessible_partner(partner_id, actor, session)
     query = select(Lead).where(Lead.partner_id == partner_id)
+    if campaign_id:
+        _, campaign = await get_campaign(partner_id, campaign_id, actor, session)
+        query = query.where(Lead.id.in_([uuid.UUID(value) for value in campaign.config.get("lead_ids", [])]))
+    if eligibility != "all":
+        allowed = eligible_expression(Lead)
+        query = query.where(allowed if eligibility == "eligible" else ~allowed)
     if import_id:
         query = query.where(Lead.import_id == import_id)
     if status:

@@ -169,3 +169,47 @@ async def test_ai_generates_opening_and_failure_preserves_draft(client):
     assert contexts[-1]["qualification"] == value["qualification"]
     assert contexts[-1]["offer"] == value["offer"]
     assert (await client.get(path + "/conversations")).json() == []
+
+
+async def test_eligibility_filtered_before_pagination(client):
+    _, lead, url = await ready_partner(client)
+    campaign = (await client.post(url + '/campaigns', json=config(lead))).json()
+    allowed = (await client.get(url + '/leads', params=dict(eligibility='eligible', limit=250))).json()
+    excluded = (await client.get(url + '/leads', params=dict(eligibility='excluded', limit=250))).json()
+    assert len(allowed) == 1 and allowed[0]['id'] == lead['id']
+    assert len(excluded) == 1 and not excluded[0]['eligible_for_sms']
+    assert (await client.get(url + '/leads', params=dict(campaign_id=campaign['id'], eligibility='excluded'))).json() == []
+    assert (await client.get(url + '/leads', params=dict(eligibility='eligible', limit=1, offset=1))).json() == []
+    assert (await client.get(url + '/leads', params=dict(limit=251))).status_code == 422
+
+
+def test_ten_thousand_campaign_capacity():
+    from app.schemas import CampaignConfig, RecipientSelection
+    ids = [uuid.uuid4() for _ in range(10000)]
+    assert len(CampaignConfig(name='Large list', lead_ids=ids).lead_ids) == 10000
+    assert len(RecipientSelection(expected_revision=1, lead_ids=ids).lead_ids) == 10000
+
+
+async def test_load_more_pages_and_full_list_filter(client):
+    from sqlalchemy import update
+    from test_api import create, upload
+
+    from app.database import get_session
+    from app.main import app
+    from app.models import Lead
+
+    partner = await create(client)
+    pid = partner['id']
+    raw = ('Phone,Name\n' + '\n'.join(f'{15550000000+i},Contact {i}' for i in range(751))).encode()
+    assert (await upload(client, pid, 0, raw)).status_code == 201
+    async for session in app.dependency_overrides[get_session]():
+        await session.execute(update(Lead).where(Lead.partner_id == uuid.UUID(pid), Lead.phone >= '15550000500').values(status='eligible', sms_permission='recorded', permission_evidence='Signed opt-in reference'))
+        await session.commit()
+    path = '/v1/partners/' + pid + '/leads'
+    pages = [(await client.get(path, params=dict(limit=250, offset=offset))).json() for offset in [0, 250, 500, 750]]
+    assert [len(page) for page in pages] == [250, 250, 250, 1]
+    assert len({item['id'] for page in pages for item in page}) == 751
+    first = (await client.get(path, params=dict(limit=250, eligibility='eligible'))).json()
+    last = (await client.get(path, params=dict(limit=250, eligibility='eligible', offset=250))).json()
+    assert len(first) == 250 and len(last) == 1
+    assert all(item['eligible_for_sms'] for item in first + last)

@@ -6,8 +6,8 @@
 2. Set the campaign timezone and start/end times using pickers. Tap the daily limit to edit it directly. The AI creates the opening SMS from the business and campaign information during preparation.
 3. Open the saved campaign and choose **Review and select leads**.
 4. Choose current campaign leads, all business leads, or an original import source. Reused duplicate contacts retain their original import source; the current campaign list includes attached duplicates.
-5. Review each unknown contact. Record actual permission evidence, its source, consent date and recipient country code; attest that business-specific marketing SMS permission and restrictions have been reviewed. Alternatively exclude the contact or record an opt-out.
-6. Filter to contacts with recorded permission, select the desired contacts and save eligible recipients. Up to 500 recipients per campaign. Filtering alone does not change the saved selection; save the selection explicitly.
+5. Leads load 250 at a time. Use **Load more** to view the next 250. Eligibility and import-source filters apply to the entire list on the server and restart loading at the first page. Submit a search using the keyboard Search button; clearing it reloads the list. Selections persist across pages and filters. **Select eligible leads shown** selects only the currently loaded matching leads. Review each unknown contact. Record actual permission evidence, its source, consent date and recipient country code; attest that business-specific marketing SMS permission and restrictions have been reviewed. Alternatively exclude the contact or record an opt-out.
+6. Filter to contacts with recorded permission, select the desired contacts and save eligible recipients. Up to 10,000 recipients per campaign. Filtering alone does not change the saved selection; save the selection explicitly.
 7. Choose **Check campaign readiness**. The backend generates an opening SMS using the existing Responses API agent, validates the business name and opt-out instruction and saves the result for preview. Each successful preparation regenerates it from the current campaign details. Invalid or unavailable AI responses leave preparation unchanged. Existing business onboarding, owner readiness and pilot approval gates still apply; blockers are shown. Changing recipients resets preparation.
 8. Choose **Start messages** after preparation succeeds. The backend rechecks current permissions and revisions, then returns `SMS provider connection required. Nothing was queued or sent.`
 
@@ -38,8 +38,8 @@ Backend (run each command in order; merge stops if there is a conflict):
 ```sh
 cd /Users/jamesmcdougall/Desktop/Dev/SaltAndLight/CrewCrate/CrewCrate-Backend
 git switch develop
-git add app/campaigns.py app/ai_tests.py app/schemas.py app/contact_policy.py tests/test_api.py tests/test_contact_review.py openapi.json README.md SMS_PROVIDER_SETUP.md
-git commit -m "Generate AI campaign openings during preparation"
+git add app/main.py app/campaigns.py app/ai_tests.py app/schemas.py app/contact_policy.py tests/test_api.py tests/test_contact_review.py tests/test_spreadsheet_imports.py openapi.json README.md SMS_PROVIDER_SETUP.md
+git commit -m "Support 10000 campaign leads with paginated eligibility filtering"
 git push origin develop
 git switch main
 git pull --ff-only origin main
@@ -52,7 +52,7 @@ In Render, open CrewCrate API, confirm main is the deployment branch, then **Man
 ```sh
 cd /Users/jamesmcdougall/Desktop/Dev/SaltAndLight/CrewCrate/CrewCrate-iOS
 git add CrewCrate/CrewCrate/Models/AuthenticatedIdentity.swift CrewCrate/CrewCrate/Services/AuthenticationServicing.swift CrewCrate/CrewCrate/Services/SupabaseSession.swift CrewCrate/CrewCrate/ViewModels/SavedCampaignViewModel.swift CrewCrate/CrewCrate/ViewModels/CampaignDetailsViewModel.swift CrewCrate/CrewCrate/ViewModels/RecipientReviewViewModel.swift CrewCrate/CrewCrate/Views/CampaignDetailsView.swift CrewCrate/CrewCrate/Views/SavedCampaignDetailsView.swift CrewCrate/CrewCrate/Views/RecipientReviewView.swift Tests/AuthenticationChecks.swift
-git commit -m "Use sending pickers and editable daily limits"
+git commit -m "Load campaign leads in 250 contact pages"
 git push origin main
 ```
 

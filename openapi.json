@@ -901,7 +901,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 100,
+              "maximum": 250,
               "minimum": 1,
               "default": 50,
               "title": "Limit"
@@ -960,6 +960,34 @@
                 }
               ],
               "title": "Import Id"
+            }
+          },
+          {
+            "name": "campaign_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campaign Id"
+            }
+          },
+          {
+            "name": "eligibility",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|eligible|excluded)$",
+              "default": "all",
+              "title": "Eligibility"
             }
           },
           {
@@ -3648,7 +3676,7 @@
               "format": "uuid"
             },
             "type": "array",
-            "maxItems": 500,
+            "maxItems": 10000,
             "title": "Lead Ids"
           }
         },
@@ -4812,7 +4840,7 @@
               "format": "uuid"
             },
             "type": "array",
-            "maxItems": 500,
+            "maxItems": 10000,
             "title": "Lead Ids"
           }
         },

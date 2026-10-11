@@ -3,7 +3,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .contact_policy import exclusion_reasons
 
 
 class PartnerStatus(StrEnum):
@@ -149,6 +151,15 @@ class LeadRead(ORMModel):
     status: LeadStatus
     revision: int
 
+    eligible_for_sms: bool = False
+    exclusion_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def calculate_eligibility(self):
+        self.exclusion_reasons = exclusion_reasons(self)
+        self.eligible_for_sms = not self.exclusion_reasons
+        return self
+
 
 class ImportIssue(BaseModel):
     row_number: int
@@ -280,3 +291,22 @@ class BusinessProfile(BaseModel):
 
 class BusinessProfileUpdate(BusinessProfile):
     expected_revision: int = Field(ge=0)
+
+
+class ContactReview(RevisionRequest):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["record_permission", "exclude", "opt_out"]
+    evidence: str = Field(min_length=8, max_length=1400)
+    source: str = Field(default="", max_length=200)
+    consent_date: str = Field(default="", max_length=10)
+    country: str = Field(default="", max_length=2)
+    attested: bool = False
+
+
+class RecipientSelection(RevisionRequest):
+    lead_ids: list[uuid.UUID] = Field(max_length=500)
+
+
+class RecipientSelectionRead(BaseModel):
+    campaign: CampaignRead
+    removed_count: int

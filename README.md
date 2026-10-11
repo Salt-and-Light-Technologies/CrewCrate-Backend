@@ -129,3 +129,7 @@ are discarded. There is no provider delivery. Deploy backend first: Render's exi
 `pip install .` build installs openpyxl/defusedxml. No database migration is needed.
 Tests cover formats/worksheet selection, malformed files/formulas, atomic rollback,
 revision conflicts, access isolation, duplicates and retained suppression records.
+
+### Contact review and recipient selection
+
+Saved campaigns now expose contact permission review, lead-list filtering, recipient selection, preparation and a Start action up to the disabled SMS provider boundary. `POST /v1/partners/{id}/leads/{lead_id}/contact-review` records permission evidence or exclusion/opt-out decisions; `PUT /v1/partners/{id}/campaigns/{campaign_id}/recipients` strips contacts that fail the central permission policy. Lead responses include `eligible_for_sms` and `exclusion_reasons`. Launch rechecks current eligibility, preparation revisions, holds, onboarding and the opening message, then fails without queueing when provider connection is required. These checks do not provide external legal clearance. See [SMS_PROVIDER_SETUP.md](SMS_PROVIDER_SETUP.md) for the exact app workflow, limitations, provider choices and commit/deployment commands. No new migration is required.

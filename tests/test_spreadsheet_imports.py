@@ -99,3 +99,36 @@ async def test_oversized_campaign_rolls_back(client):  # noqa: F811
     assert (await client.get(path + '/leads')).json() == []
     assert (await client.get(path + '/campaigns')).json() == []
     assert (await client.get(path + '/imports')).json() == []
+
+
+async def test_campaign_permission_columns_and_duplicate_optouts(client):  # noqa: F811
+    import json
+    partner = await create(client)
+    login(USER)
+    path = f"/v1/partners/{partner['id']}"
+    mapping = json.dumps(dict(permission='Permission', evidence='Evidence', optout='Optout', test='Test'))
+    raw = b'Phone,Permission,Evidence,Optout,Test\n12025550101,recorded,SIMULATED consent record,false,true\n12025550102,unknown,,false,true\n12025550103,revoked,Asked to stop,true,true\n'
+    result = await client.post(path + '/campaign-import', files={'file': ('leads.csv', raw)}, data={'config': '{"name":"Permissions"}', 'phone_column':'Phone', 'permission_columns':mapping, 'expected_partner_revision':'0'})
+    assert result.status_code == 200, result.text
+    leads = (await client.get(path + '/leads')).json()
+    byphone = {lead['phone']:lead for lead in leads}
+    assert byphone['12025550101']['eligible_for_sms']
+    assert not byphone['12025550102']['eligible_for_sms']
+    assert byphone['12025550103']['opted_out']
+    assert any('Test-only' in b for b in result.json()['blockers'])
+    ids = (await client.get(path + '/eligible-recipient-ids')).json()
+    assert ids == [byphone['12025550101']['id']]
+    current = (await client.get(path)).json()
+    retry = b'Phone,Permission,Evidence,Optout,Test\n12025550103,recorded,SIMULATED new consent,false,true\n'
+    result2 = await client.post(path + '/campaign-import', files={'file':('retry.csv', retry)}, data={'config':'{"name":"Retry"}', 'phone_column':'Phone','permission_columns':mapping,'expected_partner_revision':str(current['revision'])})
+    assert result2.status_code == 200, result2.text
+    stopped = next(x for x in (await client.get(path+'/leads')).json() if x['phone']=='12025550103')
+    assert stopped['opted_out'] and not stopped['eligible_for_sms']
+
+
+def test_real_permission_requires_attestation_and_evidence():
+    from app.imports import parse_csv
+    raw = b'Phone,Permission,Evidence\n12025550101,recorded,Signed form reference ABC\n'
+    mapping = '{"permission":"Permission","evidence":"Evidence"}'
+    assert parse_csv(raw,'Phone',None,None,mapping).contacts[0]['sms_permission'] == 'unknown'
+    assert parse_csv(raw,'Phone',None,None,mapping,True).contacts[0]['sms_permission'] == 'recorded'

@@ -105,6 +105,8 @@ async def campaign_read(partner, campaign, session):
     permitted = [x for x in leads if not exclusion_reasons(x)]
     if len(permitted) != len(leads):
         blockers.append("Every selected lead needs eligible status, recorded SMS permission and no opt-out")
+    if any(x.permission_evidence.startswith("[TEST ONLY]") for x in leads):
+        blockers.append("Test-only contacts cannot receive real SMS. Use real contacts with verified permission for outreach.")
     needs_recheck = campaign.status == "ready_to_connect" and (
         campaign.prepared_partner_revision != partner.revision
         or campaign.prepared_lead_revisions != {str(x.id): x.revision for x in leads}
@@ -152,7 +154,7 @@ async def permission(
     if lead.opted_out and body.permission == "recorded":
         raise HTTPException(409, "Opted-out contacts cannot be re-enabled through this endpoint")
     lead.sms_permission = body.permission
-    lead.permission_evidence = body.evidence.strip()
+    lead.permission_evidence = ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") else "") + body.evidence.strip()
     if body.permission == "revoked":
         lead.opted_out = True
     lead.status = "eligible" if body.permission == "recorded" and not lead.opted_out else "excluded"
@@ -535,6 +537,8 @@ async def campaign_import(
     phone_column: str = Form(max_length=200),
     name_column: str | None = Form(default=None, max_length=200),
     email_column: str | None = Form(default=None, max_length=200),
+    permission_columns: str = Form(default="{}", max_length=2000),
+    permission_attested: bool = Form(default=False),
     sheet: str | None = Form(default=None, max_length=200),
     campaign_id: uuid.UUID | None = Form(default=None),
     expected_revision: int | None = Form(default=None, ge=0),
@@ -553,6 +557,8 @@ async def campaign_import(
             phone_column,
             name_column,
             email_column,
+            permission_columns,
+            permission_attested,
         )
     finally:
         await file.close()
@@ -599,7 +605,26 @@ async def campaign_import(
         session.add(lead)
         existing[lead.phone] = lead
     await session.flush()
-    # Reuse existing contacts without overwriting permissions, opt-outs or contact fields.
+    # Apply permission data to duplicates conservatively; never re-enable an opt-out.
+    for contact in parsed.contacts:
+        lead = existing[contact["phone"]]
+        if "sms_permission" not in contact:
+            continue
+        if contact["opted_out"]:
+            lead.opted_out = True
+            lead.sms_permission = "revoked"
+            lead.status = "excluded"
+            lead.permission_evidence = contact["permission_evidence"] or "Imported opt-out"
+            lead.revision += 1
+        elif not lead.opted_out and lead.sms_permission != "revoked" and contact["sms_permission"] == "recorded":
+            # Test records cannot overwrite a real contact's permission.
+            if contact["permission_evidence"].startswith("[TEST ONLY]") and lead.permission_evidence and not lead.permission_evidence.startswith("[TEST ONLY]"):
+                continue
+            lead.sms_permission = "recorded"
+            lead.status = "eligible"
+            lead.permission_evidence = ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") and not contact["permission_evidence"].startswith("[TEST ONLY]") else "") + contact["permission_evidence"]
+            lead.revision += 1
+
     attached = list(dict.fromkeys(body.lead_ids + [existing[c["phone"]].id for c in parsed.contacts]))
     if not parsed.contacts:
         raise HTTPException(422, "No valid leads to add. Fix the file and preview it again.")
@@ -672,7 +697,7 @@ async def contact_review(
         lead.sms_permission = "recorded"
         lead.status = "eligible"
         lead.permission_evidence = (
-            f"Business: {partner.name}; Source: {body.source.strip()}; "
+            ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") else "") + f"Business: {partner.name}; Source: {body.source.strip()}; "
             f"Consent date: {body.consent_date}; Country: {body.country.upper()}; "
             f"Business-specific marketing SMS reviewed: yes. {body.evidence.strip()}"
         )
@@ -680,7 +705,7 @@ async def contact_review(
         lead.opted_out = True
         lead.sms_permission = "revoked"
         lead.status = "excluded"
-        lead.permission_evidence = body.evidence.strip()
+        lead.permission_evidence = ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") else "") + body.evidence.strip()
     else:
         lead.status = "excluded"
     lead.revision += 1
@@ -735,3 +760,29 @@ async def select_recipients(
     return RecipientSelectionRead(
         campaign=await campaign_read(partner, campaign, session), removed_count=len(requested) - len(selected)
     )
+
+
+@router.get("/partners/{partner_id}/eligible-recipient-ids", response_model=list[uuid.UUID])
+async def eligible_recipient_ids(partner_id: uuid.UUID, actor: User, session: Session,
+                                 campaign_id: uuid.UUID | None = None, import_id: uuid.UUID | None = None,
+                                 search: str = Query("", max_length=200)):
+    from sqlalchemy import or_
+
+    from .contact_policy import eligible_expression
+
+    await accessible_partner(partner_id, actor, session)
+    query = select(Lead.id).where(Lead.partner_id == partner_id, eligible_expression(Lead))
+    if campaign_id:
+        _, campaign = await get_campaign(partner_id, campaign_id, actor, session)
+        query = query.where(Lead.id.in_([uuid.UUID(value) for value in campaign.config.get("lead_ids", [])]))
+    if import_id:
+        query = query.where(Lead.import_id == import_id)
+    if search.strip():
+        needle = search.strip().lower()
+        query = query.where(or_(func.lower(Lead.name).contains(needle, autoescape=True),
+                                func.lower(Lead.email).contains(needle, autoescape=True),
+                                Lead.phone.contains(needle, autoescape=True)))
+    ids = (await session.scalars(query.order_by(Lead.id).limit(10001))).all()
+    if len(ids) > 10000:
+        raise HTTPException(422, "More than 10,000 eligible leads match. Narrow the list or search first.")
+    return ids

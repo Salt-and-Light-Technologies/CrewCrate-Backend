@@ -100,6 +100,6 @@ def decode_sheet(raw, filename, sheet=None):
             workbook.close()
 
 
-def parse_file(raw, filename, sheet, phone_column, name_column, email_column):
+def parse_file(raw, filename, sheet, phone_column, name_column, email_column, permission_columns="{}", permission_attested=False):
     normalized, _ = decode_sheet(raw, filename, sheet)
-    return parse_csv(normalized, phone_column, name_column, email_column)
+    return parse_csv(normalized, phone_column, name_column, email_column, permission_columns, permission_attested)

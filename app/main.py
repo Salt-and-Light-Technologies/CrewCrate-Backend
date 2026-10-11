@@ -268,12 +268,14 @@ async def import_leads(
     expected_revision: int = Form(ge=0),
     name_column: str | None = Form(default=None, max_length=200),
     email_column: str | None = Form(default=None, max_length=200),
+    permission_columns: str = Form(default="{}", max_length=2000),
+    permission_attested: bool = Form(default=False),
     sheet: str | None = Form(default=None, max_length=200),
 ):
     await accessible_partner(partner_id, actor, session)
     try:
         raw = await file.read(MAX_BYTES + 1)
-        parsed = await run_in_threadpool(parse_file, raw, file.filename, sheet, phone_column, name_column, email_column)
+        parsed = await run_in_threadpool(parse_file, raw, file.filename, sheet, phone_column, name_column, email_column, permission_columns, permission_attested)
     finally:
         await file.close()
     partner = await accessible_partner(partner_id, actor, session, lock=True)
@@ -479,13 +481,15 @@ async def preview_import(
     phone_column: str = Form(max_length=200),
     name_column: str | None = Form(default=None, max_length=200),
     email_column: str | None = Form(default=None, max_length=200),
+    permission_columns: str = Form(default="{}", max_length=2000),
+    permission_attested: bool = Form(default=False),
     sheet: str | None = Form(default=None, max_length=200),
 ):
     partner = await accessible_partner(partner_id, actor, session)
     if partner.status == "paused":
         raise HTTPException(409, "CSV uploads are unavailable while the partner is paused")
     try:
-        parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename, sheet, phone_column, name_column, email_column)
+        parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename, sheet, phone_column, name_column, email_column, permission_columns, permission_attested)
     finally:
         await file.close()
     existing = (await session.scalars(select(Lead.phone).where(Lead.partner_id == partner_id))).all()

@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import re
 from dataclasses import dataclass
 
@@ -17,7 +18,7 @@ class ParsedCSV:
     issues: list[dict]
 
 
-def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_column: str | None):
+def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_column: str | None, permission_columns: str = "{}", permission_attested: bool = False):
     if len(raw) > MAX_BYTES:
         raise HTTPException(413, "CSV exceeds 5 MB")
     try:
@@ -29,7 +30,10 @@ def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_colu
             or any(not x for x in headers)
         ):
             raise ValueError("CSV requires unique nonempty headers")
-        mapping = [phone_column] + [x for x in (name_column, email_column) if x]
+        permissions = json.loads(permission_columns)
+        if not isinstance(permissions, dict) or any(k not in {"permission", "evidence", "optout", "test"} or not isinstance(v, str) for k, v in permissions.items()):
+            raise ValueError("Invalid permission mapping")
+        mapping = [phone_column] + [x for x in (name_column, email_column) if x] + [v for v in permissions.values() if v]
         if any(x not in headers for x in mapping) or len(set(mapping)) != len(mapping):
             raise ValueError("Choose distinct mapped columns")
         contacts, invalid, total, issues = [], 0, 0, []
@@ -59,7 +63,21 @@ def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_colu
                     dict(row_number=total, kind="invalid", detail="Check phone, email or field length")
                 )
                 continue
-            contacts.append(dict(phone=phone, name=name, email=email, row_number=total))
+            contact = dict(phone=phone, name=name, email=email, row_number=total)
+            if permissions:
+                flag = values.get(permissions.get("permission"), "").strip().casefold()
+                evidence = values.get(permissions.get("evidence"), "").strip()
+                optout = values.get(permissions.get("optout"), "").strip().casefold()
+                test = values.get(permissions.get("test"), "").strip().casefold()
+                if flag not in {"", "unknown", "recorded", "revoked", "yes", "no", "true", "false", "opted_out", "opt-out"} or optout not in {"", "true", "false", "yes", "no", "1", "0"} or test not in {"", "true", "false", "yes", "no", "1", "0"} or len(evidence) > 1400:
+                    raise ValueError("Invalid permission value or evidence")
+                stopped = flag in {"revoked", "no", "false", "opted_out", "opt-out"} or optout in {"true", "yes", "1"}
+                simulated = test in {"true", "yes", "1"} or "simulated" in evidence.casefold()
+                recorded = flag in {"recorded", "yes", "true"} and len(evidence) >= 8 and (permission_attested or simulated)
+                contact.update(sms_permission="revoked" if stopped else "recorded" if recorded else "unknown",
+                               status="excluded" if stopped else "eligible" if recorded else "unreviewed",
+                               opted_out=stopped, permission_evidence=("[TEST ONLY] " if simulated else "") + evidence)
+            contacts.append(contact)
         if not total:
             raise ValueError("CSV contains no records")
         return ParsedCSV(contacts, total, invalid, issues)

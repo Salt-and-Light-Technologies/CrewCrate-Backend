@@ -213,3 +213,7 @@ async def test_load_more_pages_and_full_list_filter(client):
     last = (await client.get(path, params=dict(limit=250, eligibility='eligible', offset=250))).json()
     assert len(first) == 250 and len(last) == 1
     assert all(item['eligible_for_sms'] for item in first + last)
+    all_ids = (await client.get('/v1/partners/' + pid + '/eligible-recipient-ids')).json()
+    assert len(all_ids) == 251
+    assert set(all_ids) == {item['id'] for item in first + last}
+    assert (await client.get('/v1/partners/' + pid + '/eligible-recipient-ids', params={'search': 'Contact 750'})).json() == [next(item['id'] for item in first + last if item['name'] == 'Contact 750')]

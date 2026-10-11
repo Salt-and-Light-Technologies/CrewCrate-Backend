@@ -2870,6 +2870,112 @@
         }
       }
     },
+    "/v1/partners/{partner_id}/eligible-recipient-ids": {
+      "get": {
+        "summary": "Eligible Recipient Ids",
+        "operationId": "eligible_recipient_ids_v1_partners__partner_id__eligible_recipient_ids_get",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "campaign_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campaign Id"
+            }
+          },
+          {
+            "name": "import_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Import Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "title": "Response Eligible Recipient Ids V1 Partners  Partner Id  Eligible Recipient Ids Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/partners/{partner_id}/handoff-emails": {
       "get": {
         "summary": "Handoff Emails",
@@ -3252,6 +3358,17 @@
             ],
             "title": "Email Column"
           },
+          "permission_columns": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Permission Columns",
+            "default": "{}"
+          },
+          "permission_attested": {
+            "type": "boolean",
+            "title": "Permission Attested",
+            "default": false
+          },
           "sheet": {
             "anyOf": [
               {
@@ -3365,6 +3482,17 @@
             ],
             "title": "Email Column"
           },
+          "permission_columns": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Permission Columns",
+            "default": "{}"
+          },
+          "permission_attested": {
+            "type": "boolean",
+            "title": "Permission Attested",
+            "default": false
+          },
           "sheet": {
             "anyOf": [
               {
@@ -3421,6 +3549,17 @@
               }
             ],
             "title": "Email Column"
+          },
+          "permission_columns": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Permission Columns",
+            "default": "{}"
+          },
+          "permission_attested": {
+            "type": "boolean",
+            "title": "Permission Attested",
+            "default": false
           },
           "sheet": {
             "anyOf": [

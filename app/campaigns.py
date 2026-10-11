@@ -1,5 +1,6 @@
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import PurePath
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
+from .contact_policy import exclusion_reasons
 from .database import get_session
 from .imports import MAX_BYTES, preview_rows
 from .models import Campaign, CampaignEvent, Conversation, ConversationEvent, Lead, LeadImport, Partner
@@ -19,12 +21,15 @@ from .schemas import (
     CampaignEventRead,
     CampaignRead,
     CampaignUpdate,
+    ContactReview,
     ConversationCreate,
     ConversationEventRead,
     ConversationRead,
     ConversationUpdate,
     LeadRead,
     PermissionUpdate,
+    RecipientSelection,
+    RecipientSelectionRead,
     RevisionRequest,
 )
 from .spreadsheet_imports import parse_file
@@ -97,14 +102,7 @@ async def campaign_read(partner, campaign, session):
     ).all()
     if len(leads) != len(set(config.lead_ids)):
         blockers.append("Some recipients are unavailable in this partner workspace")
-    permitted = [
-        x
-        for x in leads
-        if x.status == "eligible"
-        and x.sms_permission == "recorded"
-        and bool(x.permission_evidence.strip())
-        and not x.opted_out
-    ]
+    permitted = [x for x in leads if not exclusion_reasons(x)]
     if len(permitted) != len(leads):
         blockers.append("Every selected lead needs eligible status, recorded SMS permission and no opt-out")
     needs_recheck = campaign.status == "ready_to_connect" and (
@@ -113,6 +111,8 @@ async def campaign_read(partner, campaign, session):
     )
     if needs_recheck:
         blockers.append("Workspace or recipients changed since preparation; prepare again")
+    if campaign.owner_hold:
+        blockers.append("Campaign has an owner hold")
     if campaign.status in ("paused", "archived"):
         blockers.append("Campaign is " + campaign.status)
     return CampaignRead(
@@ -312,13 +312,23 @@ async def history(
     ).all()
 
 
-@router.post("/partners/{partner_id}/campaigns/{campaign_id}/launch", status_code=503)
+@router.post("/partners/{partner_id}/campaigns/{campaign_id}/launch")
 async def launch(
     partner_id: uuid.UUID, campaign_id: uuid.UUID, body: RevisionRequest, actor: User, session: Session
 ):
-    _, campaign = await get_campaign(partner_id, campaign_id, actor, session)
+    partner, campaign = await get_campaign(partner_id, campaign_id, actor, session, True)
     revision(campaign, body.expected_revision)
-    raise HTTPException(503, "Messaging provider is not connected. Nothing was queued or sent")
+    snapshot = await campaign_read(partner, campaign, session)
+    if snapshot.blockers:
+        raise HTTPException(422, detail={"blockers": snapshot.blockers})
+    if campaign.status != "ready_to_connect":
+        raise HTTPException(409, "Prepare this campaign before starting messages")
+    if not snapshot.config.message_template.strip():
+        raise HTTPException(422, "Enter and save your opening SMS message first")
+    if not re.search(r"\breply\s+stop\s+to\s+opt\s+out\b", snapshot.config.message_template, re.IGNORECASE):
+        raise HTTPException(422, "Include Reply STOP to opt out in your opening SMS")
+    # Intentional integration boundary: no job, fake receipt or delivery side effect.
+    raise HTTPException(503, "SMS provider connection required. Nothing was queued or sent.")
 
 
 @router.get("/owner/campaigns", response_model=list[CampaignRead])
@@ -483,8 +493,11 @@ async def conversation_history(
 
 @router.post("/partners/{partner_id}/campaign-import", response_model=CampaignRead)
 async def campaign_import(
-    partner_id: uuid.UUID, actor: User, session: Session,
-    file: UploadFile = File(), config: str = Form(max_length=100000),
+    partner_id: uuid.UUID,
+    actor: User,
+    session: Session,
+    file: UploadFile = File(),
+    config: str = Form(max_length=100000),
     expected_partner_revision: int = Form(ge=0),
     phone_column: str = Form(max_length=200),
     name_column: str | None = Form(default=None, max_length=200),
@@ -499,8 +512,15 @@ async def campaign_import(
     except ValueError:
         raise HTTPException(422, "Check campaign details before saving the import") from None
     try:
-        parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename,
-                                        sheet, phone_column, name_column, email_column)
+        parsed = await run_in_threadpool(
+            parse_file,
+            await file.read(MAX_BYTES + 1),
+            file.filename,
+            sheet,
+            phone_column,
+            name_column,
+            email_column,
+        )
     finally:
         await file.close()
     partner = await accessible_partner(partner_id, actor, session, lock=True)
@@ -515,15 +535,30 @@ async def campaign_import(
         if campaign.status in ("paused", "archived"):
             raise HTTPException(409, "Resume before editing; archived campaigns cannot be edited")
     else:
-        campaign = Campaign(partner_id=partner_id, status="draft", revision=0, config={},
-                            prepared_lead_revisions={}, updated_at=datetime.now(timezone.utc))
+        campaign = Campaign(
+            partner_id=partner_id,
+            status="draft",
+            revision=0,
+            config={},
+            prepared_lead_revisions={},
+            updated_at=datetime.now(timezone.utc),
+        )
         session.add(campaign)
         await session.flush()
-    existing = {lead.phone: lead for lead in (await session.scalars(select(Lead).where(Lead.partner_id == partner_id))).all()}
+    existing = {
+        lead.phone: lead
+        for lead in (await session.scalars(select(Lead).where(Lead.partner_id == partner_id))).all()
+    }
     accepted, duplicates, _ = preview_rows(parsed, existing)
-    batch = LeadImport(partner_id=partner_id, actor_id=actor.user_id,
-                       file_name=PurePath((file.filename or "leads.csv").replace("\\", "/")).name[:200],
-                       total_rows=parsed.total, imported=len(accepted), duplicates=duplicates, invalid=parsed.invalid)
+    batch = LeadImport(
+        partner_id=partner_id,
+        actor_id=actor.user_id,
+        file_name=PurePath((file.filename or "leads.csv").replace("\\", "/")).name[:200],
+        total_rows=parsed.total,
+        imported=len(accepted),
+        duplicates=duplicates,
+        invalid=parsed.invalid,
+    )
     session.add(batch)
     await session.flush()
     for contact in accepted:
@@ -537,7 +572,11 @@ async def campaign_import(
         raise HTTPException(422, "No valid leads to add. Fix the file and preview it again.")
     if len(attached) > 500:
         raise HTTPException(422, "A campaign supports up to 500 distinct leads. Upload a smaller list.")
-    scoped = set((await session.scalars(select(Lead.id).where(Lead.partner_id == partner_id, Lead.id.in_(attached)))).all())
+    scoped = set(
+        (
+            await session.scalars(select(Lead.id).where(Lead.partner_id == partner_id, Lead.id.in_(attached)))
+        ).all()
+    )
     if scoped != set(attached):
         raise HTTPException(422, "Recipients must belong to this business")
     body.lead_ids = attached
@@ -546,8 +585,120 @@ async def campaign_import(
     campaign.prepared_partner_revision = None
     campaign.prepared_lead_revisions = {}
     partner.readiness = {}
-    record_event(partner, actor, "leads_imported", partner.status,
-                 f"{len(accepted)} imported; {duplicates} duplicates; {parsed.invalid} invalid", session)
-    event(campaign, actor, "draft_saved", f"Contact file imported; {len(attached)} recipients; preparation reset", session)
+    record_event(
+        partner,
+        actor,
+        "leads_imported",
+        partner.status,
+        f"{len(accepted)} imported; {duplicates} duplicates; {parsed.invalid} invalid",
+        session,
+    )
+    event(
+        campaign,
+        actor,
+        "draft_saved",
+        f"Contact file imported; {len(attached)} recipients; preparation reset",
+        session,
+    )
     await session.commit()
     return await campaign_read(partner, campaign, session)
+
+
+@router.post("/partners/{partner_id}/leads/{lead_id}/contact-review", response_model=LeadRead)
+async def contact_review(
+    partner_id: uuid.UUID, lead_id: uuid.UUID, body: ContactReview, actor: User, session: Session
+):
+    partner = await accessible_partner(partner_id, actor, session, lock=True)
+    if partner.status == "paused":
+        raise HTTPException(409, "Business is paused")
+    lead = await session.scalar(
+        select(Lead).where(Lead.partner_id == partner_id, Lead.id == lead_id).with_for_update()
+    )
+    if lead is None:
+        raise HTTPException(404, "Lead not found")
+    revision(lead, body.expected_revision)
+    if len(body.evidence.strip()) < 8:
+        raise HTTPException(422, "Describe the permission evidence or exclusion reason")
+    if body.action == "record_permission":
+        if lead.opted_out or lead.sms_permission == "revoked":
+            raise HTTPException(409, "Opted-out contacts cannot be re-enabled here")
+        try:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", body.consent_date):
+                raise ValueError
+            consent_date = date.fromisoformat(body.consent_date)
+        except ValueError:
+            raise HTTPException(422, "Provide the consent date as YYYY-MM-DD") from None
+        if consent_date > datetime.now(timezone.utc).date():
+            raise HTTPException(422, "Consent date cannot be in the future")
+        if (
+            not body.attested
+            or not body.source.strip()
+            or not (len(body.country) == 2 and body.country.isascii() and body.country.isalpha())
+        ):
+            raise HTTPException(422, "Confirm business-specific marketing SMS permission, source and country")
+        lead.sms_permission = "recorded"
+        lead.status = "eligible"
+        lead.permission_evidence = (
+            f"Business: {partner.name}; Source: {body.source.strip()}; "
+            f"Consent date: {body.consent_date}; Country: {body.country.upper()}; "
+            f"Business-specific marketing SMS reviewed: yes. {body.evidence.strip()}"
+        )
+    elif body.action == "opt_out":
+        lead.opted_out = True
+        lead.sms_permission = "revoked"
+        lead.status = "excluded"
+        lead.permission_evidence = body.evidence.strip()
+    else:
+        lead.status = "excluded"
+    lead.revision += 1
+    record_event(
+        partner,
+        actor,
+        "contact_reviewed",
+        partner.status,
+        f"Lead {lead.id}: {body.action}; evidence: {body.evidence.strip()}",
+        session,
+    )
+    await session.commit()
+    return lead
+
+
+@router.put(
+    "/partners/{partner_id}/campaigns/{campaign_id}/recipients", response_model=RecipientSelectionRead
+)
+async def select_recipients(
+    partner_id: uuid.UUID, campaign_id: uuid.UUID, body: RecipientSelection, actor: User, session: Session
+):
+    partner, campaign = await get_campaign(partner_id, campaign_id, actor, session, True)
+    revision(campaign, body.expected_revision)
+    if campaign.status in ("paused", "archived") or partner.status == "paused" or campaign.owner_hold:
+        raise HTTPException(
+            409, "Recipients cannot be changed while campaign or business is held, paused or archived"
+        )
+    requested = list(dict.fromkeys(body.lead_ids))
+    leads = (
+        await session.scalars(
+            select(Lead).where(Lead.partner_id == partner_id, Lead.id.in_(requested)).with_for_update()
+        )
+    ).all()
+    if len(leads) != len(requested):
+        raise HTTPException(422, "Recipients must belong to this business")
+    permitted = {x.id for x in leads if not exclusion_reasons(x)}
+    selected = [x for x in requested if x in permitted]
+    config = CampaignConfig.model_validate(campaign.config)
+    config.lead_ids = selected
+    campaign.config = config.model_dump(mode="json")
+    campaign.status = "draft"
+    campaign.prepared_partner_revision = None
+    campaign.prepared_lead_revisions = {}
+    event(
+        campaign,
+        actor,
+        "recipients_selected",
+        f"{len(selected)} selected; {len(requested) - len(selected)} excluded by permission checks",
+        session,
+    )
+    await session.commit()
+    return RecipientSelectionRead(
+        campaign=await campaign_read(partner, campaign, session), removed_count=len(requested) - len(selected)
+    )

@@ -1,5 +1,7 @@
 """Persisted practice conversations. No live lead mutations or delivery integrations."""
+import asyncio
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,6 +17,8 @@ from .campaigns import Session, User, get_campaign
 from .config import get_settings
 from .models import AITestSession
 from .schemas import CampaignConfig
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/partners/{partner_id}/ai-tests", tags=["Test AI"])
 
@@ -107,7 +111,9 @@ if other parts of their message show interest. Opt-out takes precedence over han
 For end_outreach or opt_out, briefly acknowledge and ask no further questions.
 Follow the supplied campaign goals only within these rules. Never claim simulated
 handoffs or opt-outs have changed a real lead. For non-handoff decisions use an empty
-handoff_summary. Return only the specified JSON structure.
+handoff_summary. Keep reply under 1600 characters, reason under 1000 characters,
+and handoff_summary under 2000 characters. Use brief reasons, not extended analysis.
+Return only the specified JSON structure.
 """
 
 
@@ -129,32 +135,61 @@ class ResponsesAgent:
         if not history:
             history = [{"role": "user", "content": "Write the initial outreach message. Choose continue."}]
         body = {
-            "model": settings.openai_model, "store": False, "max_output_tokens": 800,
+            "model": settings.openai_model, "store": False, "max_output_tokens": 1600,
             "instructions": INSTRUCTIONS + "\nCampaign context:\n" + json.dumps(context),
             "input": history,
             "text": {"format": {"type": "json_schema", "name": "crewcrate_test_decision",
                                 "strict": True, "schema": schema}},
         }
+        failure = "provider_response"
         try:
-            async with httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/responses", json=body,
-                    headers={"Authorization": "Bearer " + settings.openai_api_key.get_secret_value()},
-                )
-            if response.status_code == 429:
-                raise HTTPException(503, "OpenAI usage or rate limit reached. Check API billing and try later.")
-            if response.status_code != 200:
-                raise HTTPException(502, "OpenAI could not complete this test. Check the server API key/model settings.")
-            result = response.json()
-            if result.get("status") != "completed":
-                raise ValueError("Incomplete response")
-            text = "".join(
-                part["text"] for item in result.get("output", []) if item.get("type") == "message"
-                for part in item.get("content", []) if part.get("type") == "output_text"
-            )
-            return AgentDecision.model_validate_json(text)
-        except (httpx.HTTPError, ValueError, KeyError, TypeError, ValidationError) as error:
-            raise HTTPException(502, "Test AI did not return a complete reply. Please retry.") from error
+            # Complete recovery within the iOS 75-second request timeout.
+            async with asyncio.timeout(55), httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
+                for attempt in range(2):
+                    response = await client.post(
+                        "https://api.openai.com/v1/responses", json=body,
+                        headers={"Authorization": "Bearer " + settings.openai_api_key.get_secret_value()},
+                    )
+                    if response.status_code == 429:
+                        logger.warning("Test AI failure category=rate_limit")
+                        raise HTTPException(503, "OpenAI usage or rate limit reached. Check API billing and try later.")
+                    if response.status_code != 200:
+                        logger.warning("Test AI failure category=http_status status=%s", response.status_code)
+                        raise HTTPException(502, "OpenAI could not complete this test. Check the server API key/model settings.")
+                    result = response.json()
+                    parts = [part for item in result.get("output", []) if item.get("type") == "message"
+                             for part in item.get("content", [])]
+                    if any(part.get("type") == "refusal" for part in parts):
+                        failure = "refusal"
+                        raise ValueError("Refusal")
+                    if result.get("status") != "completed":
+                        reason = (result.get("incomplete_details") or {}).get("reason")
+                        failure = "output_limit" if reason == "max_output_tokens" else "incomplete"
+                        logger.warning("Test AI response category=%s attempt=%s", failure, attempt + 1)
+                        if attempt == 0 and failure == "output_limit":
+                            body["max_output_tokens"] = 3200
+                            continue
+                        raise ValueError("Incomplete response")
+                    output = "".join(part["text"] for part in parts if part.get("type") == "output_text")
+                    try:
+                        return AgentDecision.model_validate_json(output)
+                    except ValidationError:
+                        failure = "invalid_decision"
+                        logger.warning("Test AI response category=invalid_decision attempt=%s", attempt + 1)
+                        if attempt == 0:
+                            body["max_output_tokens"] = 3200
+                            body["instructions"] += (
+                                "\nReturn a complete valid decision. Reply and reason must be nonempty, "
+                                "within the character limits. A handoff must include a nonempty factual "
+                                "summary; otherwise the summary must be empty."
+                            )
+                            continue
+                        raise
+        except (httpx.HTTPError, TimeoutError, ValueError, KeyError, TypeError, AttributeError) as error:
+            category = "timeout" if isinstance(error, (TimeoutError, httpx.TimeoutException)) else failure
+            # Never log lead text, campaign data, keys or raw provider responses.
+            logger.warning("Test AI failed category=%s exception=%s", category, type(error).__name__)
+            raise HTTPException(502, "The assistant couldn’t finish its reply. Your message is still here; please retry.") from None
 
 
 def get_agent():

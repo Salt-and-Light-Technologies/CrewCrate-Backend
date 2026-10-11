@@ -62,8 +62,10 @@ calling OpenAI. Other wording is classified by the model using the fixed policy 
 campaign context. Structured outputs validate the shape and decision enum, not semantic
 correctness. Review live practice behavior before any future sending integration.
 
-OpenAI requests have store=false, no tools/delivery capability, a 40-second timeout and
-bounded output. store=false does not promise zero provider retention. Missing keys,
+OpenAI requests have store=false and no tools/delivery capability. Each HTTP attempt
+has a 40-second timeout within a 55-second overall deadline. Output starts at 1,600
+tokens; one automatic retry allows 3,200 tokens for an output-limit or invalid-decision
+failure. Refusals and content filtering are not retried. store=false does not promise zero provider retention. Missing keys,
 rate limits, malformed/incomplete responses and refusals surface safe errors; keys and
 raw provider errors are never sent to iOS. Conversations use captured context throughout,
 so changing a campaign requires starting a new test to exercise its updated settings.
@@ -76,3 +78,18 @@ provider failures, quotas and lack of live lead mutations. They do not establish
 PostgreSQL locking, applied migrations, Render configuration or real model quality.
 Standalone macOS Swift checks validate DTO/service requests; they do not build the
 SwiftUI app. Device testing is performed by the user.
+
+
+## Diagnosing a failed reply
+
+Render logs report `Test AI response category=output_limit` or `invalid_decision`
+for automatically retried failures. Final failures log a category such as timeout,
+incomplete, refusal, rate_limit or http_status. No conversation text, campaign details,
+API keys or raw provider error bodies are logged. A successful retry stores only the
+validated final reply and decision. No fabricated fallback reply is used.
+
+If recovery fails, the iOS composer retains the message and shows Retry reply. This
+reuses the original request ID and revision, allowing the backend to return an already
+committed turn without another model request. Refresh conversation recovers a committed
+reply after a lost response. These checks use mocks; live demo reliability still needs
+a device test after deploying the new backend.

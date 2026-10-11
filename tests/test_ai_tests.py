@@ -212,3 +212,54 @@ async def test_turn_limit_and_failed_opening(client, agent):
     assert (await send(client, url, test, "Another message")).status_code == 409
     agent.next = AgentDecision(reply="Stop", decision="opt_out", reason="Invalid opening", handoff_summary="")
     assert (await client.post(url, json={"config": {"name": "Bad opening"}})).status_code == 502
+
+
+@pytest.mark.parametrize("first", [
+    {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}, "output": []},
+    {"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "not json"}]}]},
+    {"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(dict(reply="Ready", decision="handoff", reason="Sales request", handoff_summary=""))}]}]},
+])
+async def test_provider_recovers_once(monkeypatch, first):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-test-key")
+    get_settings.cache_clear()
+    original_client = httpx.AsyncClient
+    bodies = []
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        if len(bodies) == 1:
+            return httpx.Response(200, json=first)
+        return httpx.Response(200, json={"status": "completed", "output": [{"type": "message", "content": [{
+            "type": "output_text", "text": json.dumps(dict(reply="I can help you learn more.", decision="continue", reason="Offer question", handoff_summary="")),
+        }]}]})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
+    try:
+        result = await ResponsesAgent().generate({"business_name": "MicLocker"}, [{"role": "user", "text": "Do you have other musicians?"}])
+        assert result.decision == "continue"
+        assert len(bodies) == 2
+        assert [b["max_output_tokens"] for b in bodies] == [1600, 3200]
+        assert bodies[0]["input"] == bodies[1]["input"]
+        assert all(b["store"] is False and "tools" not in b for b in bodies)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("reason,expected_calls", [("max_output_tokens", 2), ("content_filter", 1)])
+async def test_incomplete_retry_bounded_and_logs_private(monkeypatch, caplog, reason, expected_calls):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-test-key")
+    get_settings.cache_clear()
+    original_client = httpx.AsyncClient
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"status": "incomplete", "incomplete_details": {"reason": reason}, "output": []})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
+    try:
+        with pytest.raises(HTTPException):
+            await ResponsesAgent().generate({"business_name": "Private Business"}, [{"role": "user", "text": "Private lead message"}])
+        assert len(calls) == expected_calls
+        assert "Private Business" not in caplog.text
+        assert "Private lead message" not in caplog.text
+        assert "fake-test-key" not in caplog.text
+        assert "category=" in caplog.text
+    finally:
+        get_settings.cache_clear()

@@ -438,3 +438,56 @@ async def test_saved_handoff_emails_persist_and_are_partner_isolated(client):
     login(OTHER)
     assert (await client.get(url + "/handoff-emails")).status_code == 404
     assert (await client.post(url + "/handoff-emails", json={"email": "other@example.com"})).status_code == 404
+
+
+async def test_self_service_business_setup_and_profile(client):
+    login(USER)
+    body = {"business_name": "My Roofing", "services": "Roof repairs", "service_area": "Chicago"}
+    result = await client.post("/v1/me/business", json=body)
+    assert result.status_code == 200, result.text
+    business = result.json()
+    assert business["status"] == "draft"
+    assert business["readiness"]["messaging_ready"] is False
+    assert (await client.get("/v1/me")).json()["is_owner"] is False
+    assert len((await client.get("/v1/partners")).json()) == 1
+    retry = await client.post("/v1/me/business", json=body)
+    assert retry.json()["id"] == business["id"]
+    pid = business["id"]
+    changed = {**body, "business_name": "Updated Roofing", "expected_revision": business["revision"]}
+    response = await client.put(f"/v1/partners/{pid}/business", json=changed)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated Roofing"
+    assert response.json()["revision"] == business["revision"] + 1
+    assert (await client.put(f"/v1/partners/{pid}/business", json=changed)).status_code == 409
+    history = (await client.get(f"/v1/partners/{pid}/history")).json()
+    assert {item["action"] for item in history} >= {"business_created", "business_updated"}
+    login(OTHER)
+    assert (await client.get("/v1/partners")).json() == []
+    assert (await client.put(f"/v1/partners/{pid}/business", json=changed)).status_code == 404
+    login(USER)
+    assert (await client.post("/v1/me/business", json={**body, "partner_user_id": str(OTHER)})).status_code == 422
+    assert (await client.post("/v1/me/business", json={"business_name": " "})).status_code == 422
+
+
+@pytest.mark.parametrize("status", ["paused", "pilot_approved", "submitted"])
+async def test_business_edit_preserves_onboarding_and_pause(client, status):
+    partner = await create(client)
+    pid = partner["id"]
+    login(USER)
+    saved = await client.put(f"/v1/partners/{pid}/onboarding", json={"expected_revision": 0, "onboarding": complete()})
+    revision = saved.json()["revision"]
+    # Set reviewed/paused workspaces in the isolated fixture database.
+    from app.models import Partner
+    async for session in app.dependency_overrides[get_session]():
+        row = await session.get(Partner, uuid.UUID(pid))
+        row.status = status
+        row.paused_from = "pilot_approved" if status == "paused" else None
+        row.readiness = {"messaging_ready": True}
+        await session.commit()
+    response = await client.put(f"/v1/partners/{pid}/business", json={"business_name": "Renamed", "expected_revision": revision})
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["status"] == ("paused" if status == "paused" else "changes_requested")
+    assert updated["paused_from"] == ("changes_requested" if status == "paused" else None)
+    assert not updated["readiness"]["messaging_ready"]
+    assert updated["onboarding"]["handoff_email"] == complete()["handoff_email"]

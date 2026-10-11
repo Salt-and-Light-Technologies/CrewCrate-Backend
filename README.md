@@ -84,3 +84,17 @@ Set `OPENAI_API_KEY` only on the backend; `OPENAI_MODEL` defaults to `gpt-4o-min
 Practice decisions and messages are stored separately from real leads and outcomes.
 The feature does not enable SMS or handoff notifications. Deployment and this migration
 have not been performed by the coding task.
+
+### Business setup and profile
+
+Authenticated users can POST `/v1/me/business` with business_name (required), website,
+industry, services, service_area, time_zone and ai_boundaries. The server binds membership
+to the verified user; it never accepts another user's ID or grants owner access. Retries
+return an existing membership workspace. PostgreSQL advisory transaction locking serializes
+first-time creation per user. Existing owner provisioning and `/v1/partners` remain unchanged.
+
+PUT `/v1/partners/{id}/business` accepts these fields plus expected_revision. It enforces
+partner access, locks the row, preserves unrelated onboarding fields and records history.
+Edits reset readiness; submitted/approved partners return to changes_requested, and paused
+partners stay paused with changes_requested as their resume state. Saving never approves
+or launches a campaign. No database migration is required for these endpoints.

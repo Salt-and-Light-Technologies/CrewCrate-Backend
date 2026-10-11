@@ -36,7 +36,7 @@ class Event(Base):
     __tablename__ = "cc_review_events"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
-    actor_id: Mapped[uuid.UUID] = mapped_column()
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     action: Mapped[str] = mapped_column(String(40))
     previous_status: Mapped[str] = mapped_column(String(30))
     resulting_status: Mapped[str] = mapped_column(String(30))
@@ -50,7 +50,7 @@ class LeadImport(Base):
     __tablename__ = "cc_lead_imports"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
-    actor_id: Mapped[uuid.UUID] = mapped_column()
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     file_name: Mapped[str] = mapped_column(String(200))
     total_rows: Mapped[int] = mapped_column(Integer)
     imported: Mapped[int] = mapped_column(Integer)
@@ -92,7 +92,7 @@ class CampaignEvent(Base):
     __tablename__ = "cc_campaign_events"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_campaigns.id"), index=True)
-    actor_id: Mapped[uuid.UUID] = mapped_column()
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     action: Mapped[str] = mapped_column(String(40))
     detail: Mapped[str] = mapped_column(Text, default="")
     revision: Mapped[int] = mapped_column(Integer)
@@ -115,7 +115,7 @@ class ConversationEvent(Base):
     __tablename__ = "cc_conversation_events"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_conversations.id"), index=True)
-    actor_id: Mapped[uuid.UUID] = mapped_column()
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(30))
     note: Mapped[str] = mapped_column(Text)
     revision: Mapped[int] = mapped_column(Integer)
@@ -128,7 +128,7 @@ class AITestSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cc_campaigns.id"), nullable=True)
-    actor_id: Mapped[uuid.UUID] = mapped_column()
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active")
     revision: Mapped[int] = mapped_column(Integer, default=0)
     context: Mapped[dict] = mapped_column(JSON)

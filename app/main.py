@@ -17,6 +17,7 @@ from .campaigns import router as campaign_router
 from .config import get_settings
 from .contact_policy import eligible_expression
 from .database import get_session
+from .deletion import router as deletion_router
 from .imports import MAX_BYTES, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
@@ -53,7 +54,7 @@ app = FastAPI(title="CrewCrate Revenue Recovery API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(BodyLimitMiddleware)
@@ -560,3 +561,5 @@ async def add_handoff_email(partner_id: uuid.UUID, body: SalesHandoffEmailAdd, a
     return {"emails": emails}
 
 app.include_router(ai_test_router)
+
+app.include_router(deletion_router)

@@ -504,3 +504,29 @@ async def test_business_edit_preserves_onboarding_and_pause(client, status):
     assert updated["paused_from"] == ("changes_requested" if status == "paused" else None)
     assert not updated["readiness"]["messaging_ready"]
     assert updated["onboarding"]["handoff_email"] == complete()["handoff_email"]
+
+
+async def test_campaign_deletion_access_and_revision(client):
+    partner = await create(client)
+    pid = partner['id']
+    created = await client.post(f'/v1/partners/{pid}/campaigns', json={'name': 'Delete me'})
+    assert created.status_code == 201, created.text
+    campaign = created.json()
+    url = f"/v1/partners/{pid}/campaigns/{campaign['id']}"
+    app.dependency_overrides[current_actor] = lambda: Actor(OTHER)
+    assert (await client.delete(url, params={'expected_revision': campaign['revision']})).status_code == 404
+    app.dependency_overrides[current_actor] = lambda: Actor(USER)
+    assert (await client.delete(url, params={'expected_revision': campaign['revision'] + 1})).status_code == 409
+    assert (await client.delete(url, params={'expected_revision': campaign['revision']})).status_code == 204
+    assert (await client.get(url)).status_code == 404
+
+
+async def test_account_deletion_failure_rolls_back(client, monkeypatch):
+    from app import deletion
+
+    async def unavailable(session, user_id):
+        raise HTTPException(503, 'Deletion unavailable')
+
+    monkeypatch.setattr(deletion, 'remove_auth_user', unavailable)
+    assert (await client.delete('/v1/me')).status_code == 503
+    assert (await client.get('/v1/me')).json()['is_owner'] is True

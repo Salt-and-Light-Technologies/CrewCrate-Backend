@@ -110,7 +110,7 @@ class PartnerRead(ORMModel):
 
 class EventRead(ORMModel):
     id: uuid.UUID
-    actor_id: uuid.UUID
+    actor_id: uuid.UUID | None
     action: str
     previous_status: str
     resulting_status: str
@@ -237,7 +237,7 @@ class CampaignRead(ORMModel):
 
 class CampaignEventRead(ORMModel):
     id: uuid.UUID
-    actor_id: uuid.UUID
+    actor_id: uuid.UUID | None
     action: str
     detail: str
     revision: int
@@ -266,7 +266,7 @@ class ConversationRead(ORMModel):
 
 class ConversationEventRead(ORMModel):
     id: uuid.UUID
-    actor_id: uuid.UUID
+    actor_id: uuid.UUID | None
     status: str
     note: str
     revision: int

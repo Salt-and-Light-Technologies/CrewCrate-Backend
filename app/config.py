@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY")
     )
     allowed_origins: str = ""
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4o-mini"
 
     @property
     def cors_origins(self) -> list[str]:

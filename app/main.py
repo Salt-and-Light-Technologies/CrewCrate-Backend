@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .ai_tests import router as ai_test_router
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
 from .campaigns import router as campaign_router
 from .config import get_settings
@@ -17,7 +18,6 @@ from .imports import MAX_BYTES, parse_csv, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
 from .schemas import (
-    SalesHandoffEmailAdd,
     Decision,
     DraftUpdate,
     EventRead,
@@ -32,8 +32,16 @@ from .schemas import (
     PartnerStatus,
     ReadinessUpdate,
     RevisionRequest,
+    SalesHandoffEmailAdd,
 )
-from .workflow import email_valid, apply_decision, check_revision, launch_issues, onboarding_issues, record_event
+from .workflow import (
+    apply_decision,
+    check_revision,
+    email_valid,
+    launch_issues,
+    onboarding_issues,
+    record_event,
+)
 
 app = FastAPI(title="CrewCrate Revenue Recovery API", version="0.3.0")
 app.add_middleware(
@@ -475,3 +483,5 @@ async def add_handoff_email(partner_id: uuid.UUID, body: SalesHandoffEmailAdd, a
         record_event(partner, actor, "sales_handoff_email_added", partner.status, "Saved sales handoff destination", session)
         await session.commit()
     return {"emails": emails}
+
+app.include_router(ai_test_router)

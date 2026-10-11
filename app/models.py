@@ -121,3 +121,17 @@ class ConversationEvent(Base):
     revision: Mapped[int] = mapped_column(Integer)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (UniqueConstraint("conversation_id", "revision"),)
+
+
+class AITestSession(Base):
+    __tablename__ = "cc_ai_test_sessions"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
+    campaign_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cc_campaigns.id"), nullable=True)
+    actor_id: Mapped[uuid.UUID] = mapped_column()
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    context: Mapped[dict] = mapped_column(JSON)
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    decisions: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

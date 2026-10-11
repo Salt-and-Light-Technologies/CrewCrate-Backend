@@ -824,6 +824,23 @@
             }
           },
           {
+            "name": "import_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Import Id"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -2420,6 +2437,339 @@
           }
         }
       }
+    },
+    "/v1/partners/{partner_id}/handoff-emails": {
+      "get": {
+        "summary": "Handoff Emails",
+        "operationId": "handoff_emails_v1_partners__partner_id__handoff_emails_get",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add Handoff Email",
+        "operationId": "add_handoff_email_v1_partners__partner_id__handoff_emails_post",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SalesHandoffEmailAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners/{partner_id}/ai-tests": {
+      "post": {
+        "tags": [
+          "Test AI"
+        ],
+        "summary": "Start",
+        "operationId": "start_v1_partners__partner_id__ai_tests_post",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners/{partner_id}/ai-tests/{test_id}": {
+      "get": {
+        "tags": [
+          "Test AI"
+        ],
+        "summary": "Detail",
+        "operationId": "detail_v1_partners__partner_id__ai_tests__test_id__get",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "test_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Test Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners/{partner_id}/ai-tests/{test_id}/messages": {
+      "post": {
+        "tags": [
+          "Test AI"
+        ],
+        "summary": "Turn",
+        "operationId": "turn_v1_partners__partner_id__ai_tests__test_id__messages_post",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "test_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Test Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestTurn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2533,6 +2883,30 @@
             "title": "Offer",
             "default": ""
           },
+          "ai_brief": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Brief"
+          },
+          "ai_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Name"
+          },
           "message_template": {
             "type": "string",
             "maxLength": 480,
@@ -2557,9 +2931,35 @@
             "title": "Time Zone",
             "default": "America/Chicago"
           },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 59.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 59.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
           "start_hour": {
             "type": "integer",
-            "maximum": 16.0,
+            "maximum": 17.0,
             "minimum": 9.0,
             "title": "Start Hour",
             "default": 9
@@ -2567,13 +2967,12 @@
           "end_hour": {
             "type": "integer",
             "maximum": 17.0,
-            "minimum": 10.0,
+            "minimum": 9.0,
             "title": "End Hour",
             "default": 17
           },
           "daily_limit": {
             "type": "integer",
-            "maximum": 100.0,
             "minimum": 1.0,
             "title": "Daily Limit",
             "default": 25
@@ -3386,6 +3785,14 @@
             "title": "Handoff Email",
             "default": ""
           },
+          "handoff_emails": {
+            "items": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "type": "array",
+            "title": "Handoff Emails"
+          },
           "response_hours": {
             "type": "integer",
             "maximum": 168.0,
@@ -3434,6 +3841,32 @@
             "maxLength": 10000,
             "title": "Commercial Terms",
             "default": ""
+          },
+          "fee_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Amount"
+          },
+          "fee_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Rate"
           },
           "attribution_days": {
             "type": "integer",
@@ -3654,6 +4087,270 @@
           "expected_revision"
         ],
         "title": "RevisionRequest"
+      },
+      "SalesHandoffEmailAdd": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "SalesHandoffEmailAdd"
+      },
+      "TestCreate": {
+        "properties": {
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CampaignConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TestCreate"
+      },
+      "TestDecisionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "end_outreach",
+              "opt_out",
+              "handoff"
+            ],
+            "title": "Decision"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "handoff_summary": {
+            "type": "string",
+            "title": "Handoff Summary"
+          },
+          "actor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Actor Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "simulated": {
+            "type": "boolean",
+            "const": true,
+            "title": "Simulated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "decision",
+          "reason",
+          "handoff_summary",
+          "actor_id",
+          "revision",
+          "timestamp",
+          "simulated"
+        ],
+        "title": "TestDecisionRead"
+      },
+      "TestMessageRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "assistant",
+              "user"
+            ],
+            "title": "Role"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "text",
+          "timestamp"
+        ],
+        "title": "TestMessageRead"
+      },
+      "TestRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "partner_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Partner Id"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "ended",
+              "opted_out",
+              "handoff"
+            ],
+            "title": "Status"
+          },
+          "ai_name": {
+            "type": "string",
+            "title": "Ai Name"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TestMessageRead"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/TestDecisionRead"
+            },
+            "type": "array",
+            "title": "Decisions"
+          },
+          "source": {
+            "type": "string",
+            "const": "ai_test",
+            "title": "Source"
+          },
+          "simulated": {
+            "type": "boolean",
+            "const": true,
+            "title": "Simulated"
+          },
+          "sending_enabled": {
+            "type": "boolean",
+            "const": false,
+            "title": "Sending Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "partner_id",
+          "campaign_id",
+          "revision",
+          "status",
+          "ai_name",
+          "messages",
+          "decisions",
+          "source",
+          "simulated",
+          "sending_enabled"
+        ],
+        "title": "TestRead"
+      },
+      "TestTurn": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "request_id",
+          "text"
+        ],
+        "title": "TestTurn"
       },
       "ValidationError": {
         "properties": {

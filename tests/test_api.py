@@ -8,13 +8,14 @@ os.environ.update(
 )
 import httpx
 import pytest
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.auth import Actor, current_actor
 from app.database import get_session
 from app.imports import MAX_BYTES, inspect_csv
 from app.main import app
 from app.models import Base, Owner
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 OWNER, USER, OTHER = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 

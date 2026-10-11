@@ -75,3 +75,12 @@ Campaign `/conversations` GET/POST and `/conversations/{id}` PATCH support manua
 24 local backend tests pass, including partner self-service, owner-only hold release, literal tenant scope, permissions/opt-outs, stale records, readiness invalidation, limits, manual tracking/history and fail-closed provider behavior. Tests use SQLite/mocked Supabase rather than a deployed database. Both migrations, PostgreSQL locking and live credentials remain unvalidated externally. `openapi.json` includes the complete current contract and matches the iOS adapter. The iOS app still uses the labeled demo composition.
 
 Provider integration is the next boundary: authenticated app composition plus tested development migrations, then dispatch-time eligibility/permission/suppression checks, timezone/volume scheduling, idempotent sends, provider opt-out ingestion and signed inbound/delivery receipts. Review the rollout before any production migration or delivery enablement. Revenue attribution remains separate until actual sales/payment evidence exists.
+
+## Test AI practice conversations
+
+The Responses API integration and iOS practice screen are documented in [TEST_AI.md](TEST_AI.md).
+Apply `supabase/migrations/202610110001_ai_test_sessions.sql` before deploying this feature.
+Set `OPENAI_API_KEY` only on the backend; `OPENAI_MODEL` defaults to `gpt-4o-mini`.
+Practice decisions and messages are stored separately from real leads and outcomes.
+The feature does not enable SMS or handoff notifications. Deployment and this migration
+have not been performed by the coding task.

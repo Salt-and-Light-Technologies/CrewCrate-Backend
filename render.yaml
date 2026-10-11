@@ -14,3 +14,7 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         value: ""
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

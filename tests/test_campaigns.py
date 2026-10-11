@@ -1,7 +1,8 @@
 import pytest
-from app.messaging import DisabledMessagingProvider, MessagingUnavailable
 from test_api import OTHER, OWNER, USER, complete, create, login, upload
 from test_api import client as client
+
+from app.messaging import DisabledMessagingProvider, MessagingUnavailable
 
 
 async def ready_partner(client):

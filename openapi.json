@@ -208,6 +208,128 @@
         }
       }
     },
+    "/v1/me/business": {
+      "post": {
+        "summary": "Setup Business",
+        "operationId": "setup_business_v1_me_business_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessProfile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners/{partner_id}/business": {
+      "put": {
+        "summary": "Edit Business",
+        "operationId": "edit_business_v1_partners__partner_id__business_put",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/partners/{partner_id}": {
       "get": {
         "summary": "Partner Detail",
@@ -2867,6 +2989,118 @@
           "phone_column"
         ],
         "title": "Body_preview_import_v1_partners__partner_id__imports_preview_post"
+      },
+      "BusinessProfile": {
+        "properties": {
+          "business_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Business Name"
+          },
+          "website": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Website",
+            "default": ""
+          },
+          "industry": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Industry",
+            "default": ""
+          },
+          "services": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Services",
+            "default": ""
+          },
+          "service_area": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Service Area",
+            "default": ""
+          },
+          "time_zone": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Time Zone",
+            "default": ""
+          },
+          "ai_boundaries": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Ai Boundaries",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "business_name"
+        ],
+        "title": "BusinessProfile"
+      },
+      "BusinessProfileUpdate": {
+        "properties": {
+          "business_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Business Name"
+          },
+          "website": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Website",
+            "default": ""
+          },
+          "industry": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Industry",
+            "default": ""
+          },
+          "services": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Services",
+            "default": ""
+          },
+          "service_area": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Service Area",
+            "default": ""
+          },
+          "time_zone": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Time Zone",
+            "default": ""
+          },
+          "ai_boundaries": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Ai Boundaries",
+            "default": ""
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "business_name",
+          "expected_revision"
+        ],
+        "title": "BusinessProfileUpdate"
       },
       "CampaignConfig": {
         "properties": {

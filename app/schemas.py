@@ -265,3 +265,18 @@ class ConversationEventRead(ORMModel):
 class SalesHandoffEmailAdd(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320)
+
+
+class BusinessProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    business_name: str = Field(min_length=1, max_length=160, pattern=r"\S")
+    website: str = Field(default="", max_length=2000)
+    industry: str = Field(default="", max_length=160)
+    services: str = Field(default="", max_length=10000)
+    service_area: str = Field(default="", max_length=2000)
+    time_zone: str = Field(default="", max_length=160)
+    ai_boundaries: str = Field(default="", max_length=10000)
+
+
+class BusinessProfileUpdate(BusinessProfile):
+    expected_revision: int = Field(ge=0)

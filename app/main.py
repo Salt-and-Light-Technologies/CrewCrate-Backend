@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,8 @@ from .imports import MAX_BYTES, parse_csv, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
 from .schemas import (
+    BusinessProfile,
+    BusinessProfileUpdate,
     Decision,
     DraftUpdate,
     EventRead,
@@ -99,6 +101,48 @@ async def create_partner(body: PartnerCreate, actor: OwnerUser, session: Session
     except IntegrityError:
         await session.rollback()
         raise HTTPException(422, "Partner user must be an existing Supabase account") from None
+    return await read_partner(partner, session)
+
+
+@app.post("/v1/me/business", response_model=PartnerRead)
+async def setup_business(body: BusinessProfile, actor: User, session: Session):
+    # Serialize first-time setup for this authenticated user, including retry races.
+    if session.bind.dialect.name == "postgresql":
+        await session.execute(text("SELECT pg_advisory_xact_lock(:key)"),
+                              {"key": actor.user_id.int % (2**63 - 1)})
+    existing = await session.scalar(
+        select(Partner).join(Member).where(Member.user_id == actor.user_id)
+        .order_by(Partner.id).limit(1)
+    )
+    if existing:
+        return await read_partner(existing, session)
+    partner = Partner(name=body.business_name.strip(), onboarding=body.model_dump(),
+                      readiness={}, revision=0, status="draft",
+                      updated_at=datetime.now(timezone.utc))
+    session.add(partner)
+    await session.flush()
+    session.add(Member(partner_id=partner.id, user_id=actor.user_id))
+    record_event(partner, actor, "business_created", "draft", "Self-service business setup", session)
+    await session.commit()
+    return await read_partner(partner, session)
+
+
+@app.put("/v1/partners/{partner_id}/business", response_model=PartnerRead)
+async def edit_business(partner_id: uuid.UUID, body: BusinessProfileUpdate,
+                        actor: User, session: Session):
+    partner = await accessible_partner(partner_id, actor, session, lock=True)
+    check_revision(partner, body.expected_revision)
+    previous = partner.status
+    partner.onboarding = {**partner.onboarding, **body.model_dump(exclude={"expected_revision"})}
+    partner.name = body.business_name.strip()
+    partner.readiness = {}
+    if previous == "paused":
+        partner.paused_from = "changes_requested"
+    elif previous not in ("draft", "changes_requested"):
+        partner.status = "changes_requested"
+    record_event(partner, actor, "business_updated", previous,
+                 "Business information changed; readiness requires review", session)
+    await session.commit()
     return await read_partner(partner, session)
 
 

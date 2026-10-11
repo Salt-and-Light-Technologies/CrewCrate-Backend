@@ -116,4 +116,56 @@ async def test_opening_sms_requires_explicit_stop_instruction(client):
     path = url + "/campaigns/" + campaign["id"]
     assert (await client.post(path + "/prepare", json=dict(expected_revision=1))).status_code == 200
     response = await client.post(path + "/launch", json=dict(expected_revision=2))
-    assert response.status_code == 422 and "Reply STOP" in response.text
+    assert response.status_code == 503
+    generated = (await client.get(path)).json()["config"]["message_template"]
+    assert "Reply STOP to opt out" in generated and generated != value["message_template"]
+
+
+async def test_ai_generates_opening_and_failure_preserves_draft(client):
+    from fastapi import HTTPException
+
+    from app.ai_tests import AgentDecision
+    from app.campaigns import get_opening_agent
+    from app.main import app
+
+    _, lead, url = await ready_partner(client)
+    value = config(lead)
+    value["message_template"] = ""
+    value["ai_name"] = "Maddie"
+    value["ai_brief"] = "Ask about their guitar interests"
+    campaign = (await client.post(url + "/campaigns", json=value)).json()
+    path = url + "/campaigns/" + campaign["id"]
+    contexts = []
+
+    class Agent:
+        invalid = True
+        unavailable = False
+
+        async def generate(self, context, messages):
+            contexts.append(context)
+            assert messages == []
+            if self.unavailable:
+                raise HTTPException(502, "AI unavailable")
+            text = (
+                "Wrong opening"
+                if self.invalid
+                else f"Hi, I'm Maddie from {context['business_name']}. {context['offer']} Reply STOP to opt out."
+            )
+            return AgentDecision(reply=text, decision="continue", reason="Opening", handoff_summary="")
+
+    agent = Agent()
+    app.dependency_overrides[get_opening_agent] = lambda: agent
+    assert (await client.post(path + "/prepare", json=dict(expected_revision=1))).status_code == 502
+    current = (await client.get(path)).json()
+    assert current["revision"] == 1 and current["config"]["message_template"] == ""
+    agent.unavailable = True
+    assert (await client.post(path + "/prepare", json=dict(expected_revision=1))).status_code == 502
+    agent.unavailable = False
+    agent.invalid = False
+    prepared = await client.post(path + "/prepare", json=dict(expected_revision=1))
+    assert prepared.status_code == 200
+    assert prepared.json()["config"]["message_template"].startswith("Hi, I'm Maddie")
+    assert contexts[-1]["ai_instructions"] == value["ai_brief"]
+    assert contexts[-1]["qualification"] == value["qualification"]
+    assert contexts[-1]["offer"] == value["offer"]
+    assert (await client.get(path + "/conversations")).json() == []

@@ -31,6 +31,19 @@ async def client():
         async with sessions() as session:
             yield session
 
+    from app.ai_tests import AgentDecision
+    from app.campaigns import get_opening_agent
+
+    class OpeningAgent:
+        async def generate(self, context, messages):
+            return AgentDecision(
+                reply=f"Hi from {context['business_name']}. {context['offer']} Reply STOP to opt out.",
+                decision="continue",
+                reason="Opening",
+                handoff_summary="",
+            )
+
+    app.dependency_overrides[get_opening_agent] = OpeningAgent
     app.dependency_overrides[get_session] = database
     app.dependency_overrides[current_actor] = lambda: Actor(OWNER)
     async with sessions() as session:

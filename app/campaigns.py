@@ -233,9 +233,21 @@ async def save(
     return await campaign_read(partner, campaign, session)
 
 
+def get_opening_agent():
+    # Imported on request to avoid the Test AI router's campaign dependency cycle.
+    from .ai_tests import get_agent
+
+    return get_agent()
+
+
 @router.post("/partners/{partner_id}/campaigns/{campaign_id}/prepare", response_model=CampaignRead)
 async def prepare(
-    partner_id: uuid.UUID, campaign_id: uuid.UUID, body: RevisionRequest, actor: User, session: Session
+    partner_id: uuid.UUID,
+    campaign_id: uuid.UUID,
+    body: RevisionRequest,
+    actor: User,
+    session: Session,
+    agent=Depends(get_opening_agent),
 ):
     partner, campaign = await get_campaign(partner_id, campaign_id, actor, session, True)
     revision(campaign, body.expected_revision)
@@ -250,6 +262,27 @@ async def prepare(
             select(Lead).where(Lead.partner_id == partner_id, Lead.id.in_(snapshot.config.lead_ids))
         )
     ).all()
+    from .ai_tests import campaign_context
+
+    context = campaign_context(partner, snapshot.config)
+    context["opening_requirements"] = (
+        "Write an opening SMS under 480 characters including the business name and Reply STOP to opt out."
+    )
+    opening = await agent.generate(context, [])
+    message = opening.reply.strip()
+    if (
+        opening.decision != "continue"
+        or not message
+        or len(message) > 480
+        or context["business_name"].casefold() not in message.casefold()
+        or not re.search(r"\breply\s+stop\s+to\s+opt\s+out\b", message, re.IGNORECASE)
+    ):
+        raise HTTPException(
+            502, "The AI could not create a valid opening message. Please check readiness again."
+        )
+    config = snapshot.config
+    config.message_template = message
+    campaign.config = config.model_dump(mode="json")
     campaign.status = "ready_to_connect"
     campaign.prepared_partner_revision = partner.revision
     campaign.prepared_lead_revisions = {str(x.id): x.revision for x in leads}
@@ -324,7 +357,7 @@ async def launch(
     if campaign.status != "ready_to_connect":
         raise HTTPException(409, "Prepare this campaign before starting messages")
     if not snapshot.config.message_template.strip():
-        raise HTTPException(422, "Enter and save your opening SMS message first")
+        raise HTTPException(422, "Check campaign readiness to generate the AI opening message first")
     if not re.search(r"\breply\s+stop\s+to\s+opt\s+out\b", snapshot.config.message_template, re.IGNORECASE):
         raise HTTPException(422, "Include Reply STOP to opt out in your opening SMS")
     # Intentional integration boundary: no job, fake receipt or delivery side effect.

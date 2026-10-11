@@ -192,6 +192,22 @@ class ResponsesAgent:
             raise HTTPException(502, "The assistant couldn’t finish its reply. Your message is still here; please retry.") from None
 
 
+def campaign_context(partner, config):
+    business = partner.onboarding or {}
+    return {
+        "business_name": business.get("business_name") or partner.name,
+        "services": business.get("services", ""),
+        "service_area": business.get("service_area", ""),
+        "business_boundaries": business.get("ai_boundaries", ""),
+        "campaign_name": config.name,
+        "offer": config.offer,
+        "ai_name": config.ai_name or "CrewCrate Assistant",
+        "ai_instructions": config.ai_brief or "",
+        "qualification": config.qualification,
+        "handoff_email": config.handoff_email,
+    }
+
+
 def get_agent():
     return ResponsesAgent()
 
@@ -232,13 +248,7 @@ async def start(partner_id: uuid.UUID, body: TestCreate, actor: User, session: S
         config = CampaignConfig.model_validate(campaign.config)
     else:
         config = body.config
-    business = partner.onboarding or {}
-    context = {"business_name": business.get("business_name") or partner.name,
-               "services": business.get("services", ""), "service_area": business.get("service_area", ""),
-               "business_boundaries": business.get("ai_boundaries", ""),
-               "campaign_name": config.name, "offer": config.offer,
-               "ai_name": config.ai_name or "CrewCrate Assistant", "ai_instructions": config.ai_brief or "",
-               "qualification": config.qualification, "handoff_email": config.handoff_email}
+    context = campaign_context(partner, config)
     test = AITestSession(partner_id=partner_id, campaign_id=body.campaign_id, actor_id=actor.user_id,
                          context=context, messages=[], decisions=[], revision=0)
     opening = await agent.generate(context, [])

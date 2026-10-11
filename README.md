@@ -98,3 +98,34 @@ partner access, locks the row, preserves unrelated onboarding fields and records
 Edits reset readiness; submitted/approved partners return to changes_requested, and paused
 partners stay paused with changes_requested as their resume state. Saving never approves
 or launches a campaign. No database migration is required for these endpoints.
+
+### Campaign contact file uploads
+
+Campaign creation and editing now support CSV, TSV and Excel .xlsx. Google Sheets,
+Numbers, .xls and other platform formats must first be exported to a supported file.
+Use unique nonempty headers in row 1 and phone numbers as text, including country codes.
+CSV/TSV must use UTF-8. CSV comma, semicolon and tab separators are detected. Excel uses
+a selected worksheet, reads values without executing formulas and rejects formula cells.
+
+POST `/v1/partners/{id}/imports/columns` accepts multipart file and optional sheet,
+and returns columns/sheets/selected_sheet. The existing imports and preview endpoints
+also accept these formats and optional sheet. The UI maps a required phone column and
+optional name/email columns and previews accepted, duplicate and invalid row counts.
+Files are limited to 5 MB, 128 columns and 20,000 rows. Excel archives are bounded to
+20 MB expanded and 500 entries. Parsing runs outside the async event loop.
+
+POST `/v1/partners/{id}/campaign-import` takes multipart file, config JSON, column
+mapping, optional sheet, expected_partner_revision and (for editing) campaign_id plus
+expected_revision. It creates/updates the campaign and imports contacts atomically under
+partner/campaign locks. It adds distinct valid contacts to existing recipients (up to
+500 total), reuses business contacts by normalized phone without overwriting fields,
+permissions or opt-outs, and skips invalid rows. Failures roll back campaign, import
+batch and leads together. Foreign-business recipient IDs are rejected. Re-uploading
+contacts does not grant SMS consent. Saving resets campaign preparation to draft and
+business readiness as in the existing import workflow. Pauses and owner holds remain.
+
+Only normalized contact records, file name and import counts are stored; original files
+are discarded. There is no provider delivery. Deploy backend first: Render's existing
+`pip install .` build installs openpyxl/defusedxml. No database migration is needed.
+Tests cover formats/worksheet selection, malformed files/formulas, atomic rollback,
+revision conflicts, access isolation, duplicates and retained suppression records.

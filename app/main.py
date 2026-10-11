@@ -8,13 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from .ai_tests import router as ai_test_router
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
 from .campaigns import router as campaign_router
 from .config import get_settings
 from .database import get_session
-from .imports import MAX_BYTES, parse_csv, preview_rows
+from .imports import MAX_BYTES, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
 from .schemas import (
@@ -36,6 +37,7 @@ from .schemas import (
     RevisionRequest,
     SalesHandoffEmailAdd,
 )
+from .spreadsheet_imports import decode_sheet, parse_file
 from .workflow import (
     apply_decision,
     check_revision,
@@ -264,11 +266,12 @@ async def import_leads(
     expected_revision: int = Form(ge=0),
     name_column: str | None = Form(default=None, max_length=200),
     email_column: str | None = Form(default=None, max_length=200),
+    sheet: str | None = Form(default=None, max_length=200),
 ):
     await accessible_partner(partner_id, actor, session)
     try:
         raw = await file.read(MAX_BYTES + 1)
-        parsed = parse_csv(raw, phone_column, name_column, email_column)
+        parsed = await run_in_threadpool(parse_file, raw, file.filename, sheet, phone_column, name_column, email_column)
     finally:
         await file.close()
     partner = await accessible_partner(partner_id, actor, session, lock=True)
@@ -444,6 +447,19 @@ async def owner_lead_workspaces(
     return [await workspace_summary(row, session) for row in rows]
 
 
+@app.post("/v1/partners/{partner_id}/imports/columns")
+async def import_columns(partner_id: uuid.UUID, actor: User, session: Session,
+                         file: UploadFile = File(), sheet: str | None = Form(default=None, max_length=200)):
+    partner = await accessible_partner(partner_id, actor, session)
+    if partner.status == "paused":
+        raise HTTPException(409, "Uploads are unavailable while the business is paused")
+    try:
+        _, info = await run_in_threadpool(decode_sheet, await file.read(MAX_BYTES + 1), file.filename, sheet)
+        return info
+    finally:
+        await file.close()
+
+
 @app.post("/v1/partners/{partner_id}/imports/preview", response_model=ImportPreview)
 async def preview_import(
     partner_id: uuid.UUID,
@@ -453,12 +469,13 @@ async def preview_import(
     phone_column: str = Form(max_length=200),
     name_column: str | None = Form(default=None, max_length=200),
     email_column: str | None = Form(default=None, max_length=200),
+    sheet: str | None = Form(default=None, max_length=200),
 ):
     partner = await accessible_partner(partner_id, actor, session)
     if partner.status == "paused":
         raise HTTPException(409, "CSV uploads are unavailable while the partner is paused")
     try:
-        parsed = parse_csv(await file.read(MAX_BYTES + 1), phone_column, name_column, email_column)
+        parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename, sheet, phone_column, name_column, email_column)
     finally:
         await file.close()
     existing = (await session.scalars(select(Lead.phone).where(Lead.partner_id == partner_id))).all()

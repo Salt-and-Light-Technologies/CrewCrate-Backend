@@ -1256,6 +1256,70 @@
         }
       }
     },
+    "/v1/partners/{partner_id}/imports/columns": {
+      "post": {
+        "summary": "Import Columns",
+        "operationId": "import_columns_v1_partners__partner_id__imports_columns_post",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_columns_v1_partners__partner_id__imports_columns_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/partners/{partner_id}/imports/preview": {
       "post": {
         "summary": "Preview Import",
@@ -2560,6 +2624,72 @@
         }
       }
     },
+    "/v1/partners/{partner_id}/campaign-import": {
+      "post": {
+        "summary": "Campaign Import",
+        "operationId": "campaign_import_v1_partners__partner_id__campaign_import_post",
+        "parameters": [
+          {
+            "name": "partner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Partner Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_campaign_import_v1_partners__partner_id__campaign_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/partners/{partner_id}/handoff-emails": {
       "get": {
         "summary": "Handoff Emails",
@@ -2896,6 +3026,124 @@
   },
   "components": {
     "schemas": {
+      "Body_campaign_import_v1_partners__partner_id__campaign_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "config": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Config"
+          },
+          "expected_partner_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Partner Revision"
+          },
+          "phone_column": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Phone Column"
+          },
+          "name_column": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Column"
+          },
+          "email_column": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Column"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "config",
+          "expected_partner_revision",
+          "phone_column"
+        ],
+        "title": "Body_campaign_import_v1_partners__partner_id__campaign_import_post"
+      },
+      "Body_import_columns_v1_partners__partner_id__imports_columns_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_columns_v1_partners__partner_id__imports_columns_post"
+      },
       "Body_import_leads_v1_partners__partner_id__imports_post": {
         "properties": {
           "file": {
@@ -2936,6 +3184,18 @@
               }
             ],
             "title": "Email Column"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
           }
         },
         "type": "object",
@@ -2981,6 +3241,18 @@
               }
             ],
             "title": "Email Column"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
           }
         },
         "type": "object",

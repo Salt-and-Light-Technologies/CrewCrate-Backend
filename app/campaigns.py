@@ -1,15 +1,18 @@
 import uuid
 from datetime import datetime, timezone
+from pathlib import PurePath
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
 from .database import get_session
-from .models import Campaign, CampaignEvent, Conversation, ConversationEvent, Lead, Partner
+from .imports import MAX_BYTES, preview_rows
+from .models import Campaign, CampaignEvent, Conversation, ConversationEvent, Lead, LeadImport, Partner
 from .schemas import (
     CampaignConfig,
     CampaignControl,
@@ -24,6 +27,7 @@ from .schemas import (
     PermissionUpdate,
     RevisionRequest,
 )
+from .spreadsheet_imports import parse_file
 from .workflow import email_valid, launch_issues, record_event
 
 router = APIRouter(prefix="/v1")
@@ -475,3 +479,75 @@ async def conversation_history(
             .offset(offset)
         )
     ).all()
+
+
+@router.post("/partners/{partner_id}/campaign-import", response_model=CampaignRead)
+async def campaign_import(
+    partner_id: uuid.UUID, actor: User, session: Session,
+    file: UploadFile = File(), config: str = Form(max_length=100000),
+    expected_partner_revision: int = Form(ge=0),
+    phone_column: str = Form(max_length=200),
+    name_column: str | None = Form(default=None, max_length=200),
+    email_column: str | None = Form(default=None, max_length=200),
+    sheet: str | None = Form(default=None, max_length=200),
+    campaign_id: uuid.UUID | None = Form(default=None),
+    expected_revision: int | None = Form(default=None, ge=0),
+):
+    await accessible_partner(partner_id, actor, session)
+    try:
+        body = CampaignConfig.model_validate_json(config)
+    except ValueError:
+        raise HTTPException(422, "Check campaign details before saving the import") from None
+    try:
+        parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename,
+                                        sheet, phone_column, name_column, email_column)
+    finally:
+        await file.close()
+    partner = await accessible_partner(partner_id, actor, session, lock=True)
+    revision(partner, expected_partner_revision)
+    if partner.status == "paused":
+        raise HTTPException(409, "Business is paused")
+    if campaign_id:
+        _, campaign = await get_campaign(partner_id, campaign_id, actor, session, True)
+        if expected_revision is None:
+            raise HTTPException(422, "Campaign revision is required")
+        revision(campaign, expected_revision)
+        if campaign.status in ("paused", "archived"):
+            raise HTTPException(409, "Resume before editing; archived campaigns cannot be edited")
+    else:
+        campaign = Campaign(partner_id=partner_id, status="draft", revision=0, config={},
+                            prepared_lead_revisions={}, updated_at=datetime.now(timezone.utc))
+        session.add(campaign)
+        await session.flush()
+    existing = {lead.phone: lead for lead in (await session.scalars(select(Lead).where(Lead.partner_id == partner_id))).all()}
+    accepted, duplicates, _ = preview_rows(parsed, existing)
+    batch = LeadImport(partner_id=partner_id, actor_id=actor.user_id,
+                       file_name=PurePath((file.filename or "leads.csv").replace("\\", "/")).name[:200],
+                       total_rows=parsed.total, imported=len(accepted), duplicates=duplicates, invalid=parsed.invalid)
+    session.add(batch)
+    await session.flush()
+    for contact in accepted:
+        lead = Lead(partner_id=partner_id, import_id=batch.id, **contact)
+        session.add(lead)
+        existing[lead.phone] = lead
+    await session.flush()
+    # Reuse existing contacts without overwriting permissions, opt-outs or contact fields.
+    attached = list(dict.fromkeys(body.lead_ids + [existing[c["phone"]].id for c in parsed.contacts]))
+    if not parsed.contacts:
+        raise HTTPException(422, "No valid leads to add. Fix the file and preview it again.")
+    if len(attached) > 500:
+        raise HTTPException(422, "A campaign supports up to 500 distinct leads. Upload a smaller list.")
+    scoped = set((await session.scalars(select(Lead.id).where(Lead.partner_id == partner_id, Lead.id.in_(attached)))).all())
+    if scoped != set(attached):
+        raise HTTPException(422, "Recipients must belong to this business")
+    body.lead_ids = attached
+    campaign.config = body.model_dump(mode="json")
+    campaign.status = "draft"
+    campaign.prepared_partner_revision = None
+    campaign.prepared_lead_revisions = {}
+    partner.readiness = {}
+    record_event(partner, actor, "leads_imported", partner.status,
+                 f"{len(accepted)} imported; {duplicates} duplicates; {parsed.invalid} invalid", session)
+    event(campaign, actor, "draft_saved", f"Contact file imported; {len(attached)} recipients; preparation reset", session)
+    await session.commit()
+    return await campaign_read(partner, campaign, session)

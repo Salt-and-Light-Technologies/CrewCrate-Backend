@@ -173,6 +173,8 @@ async def permission(
 
 @router.post("/partners/{partner_id}/campaigns", response_model=CampaignRead, status_code=201)
 async def create(partner_id: uuid.UUID, body: CampaignConfig, actor: User, session: Session):
+    if await is_owner(actor, session):
+        raise HTTPException(403, "Only the business can create campaigns. Platform owner access is for oversight.")
     partner = await accessible_partner(partner_id, actor, session, lock=True)
     if partner.status == "paused":
         raise HTTPException(409, "Partner is paused")
@@ -543,6 +545,8 @@ async def campaign_import(
     campaign_id: uuid.UUID | None = Form(default=None),
     expected_revision: int | None = Form(default=None, ge=0),
 ):
+    if campaign_id is None and await is_owner(actor, session):
+        raise HTTPException(403, "Only the business can create campaigns. Platform owner access is for oversight.")
     await accessible_partner(partner_id, actor, session)
     try:
         body = CampaignConfig.model_validate_json(config)

@@ -22,6 +22,7 @@ from .deletion import router as deletion_router
 from .imports import MAX_BYTES, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
+from .owner_analytics import router as owner_analytics_router
 from .schemas import (
     BusinessProfile,
     BusinessProfileUpdate,
@@ -60,6 +61,7 @@ app.add_middleware(
 )
 app.add_middleware(BodyLimitMiddleware)
 app.include_router(application_router)
+app.include_router(owner_analytics_router)
 Session = Annotated[AsyncSession, Depends(get_session)]
 User = Annotated[Actor, Depends(current_actor)]
 OwnerUser = Annotated[Actor, Depends(require_owner)]

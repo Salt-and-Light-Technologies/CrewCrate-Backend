@@ -519,6 +519,7 @@ async def test_business_edit_preserves_onboarding_and_pause(client, status):
 async def test_campaign_deletion_access_and_revision(client):
     partner = await create(client)
     pid = partner['id']
+    login(USER)
     created = await client.post(f'/v1/partners/{pid}/campaigns', json={'name': 'Delete me'})
     assert created.status_code == 201, created.text
     campaign = created.json()

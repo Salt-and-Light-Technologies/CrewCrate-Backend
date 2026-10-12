@@ -1,5 +1,14 @@
 # CrewCrate Revenue Recovery API
 
+## Owner oversight and business campaign creation
+
+GET `/v1/owner/partners/{id}/analytics` provides read-only measured counts for a selected
+business, restricted to verified platform owners. Contacts, imports, campaign statuses
+and manual conversation statuses are scoped to that business. Provider/financial figures
+are unavailable rather than invented. Platform owners cannot create campaigns through
+POST campaign or campaign/import creation; authorized business members retain creation.
+See OWNER_ANALYTICS_SETUP.md for rollout. No additional migration is required.
+
 ## Current addition — platform approval for business signup
 
 Approval is now enforced independently of membership through `cc_partners.access_approved`.

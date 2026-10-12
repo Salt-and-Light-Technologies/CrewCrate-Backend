@@ -18,6 +18,7 @@ class Partner(Base):
     __tablename__ = "cc_partners"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(160))
+    access_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(30), default="draft")
     revision: Mapped[int] = mapped_column(Integer, default=0)
     onboarding: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -135,3 +136,21 @@ class AITestSession(Base):
     messages: Mapped[list] = mapped_column(JSON, default=list)
     decisions: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BusinessApplication(Base):
+    __tablename__ = "cc_business_applications"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(unique=True)
+    business_name: Mapped[str] = mapped_column(String(160))
+    contact_name: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(320))
+    phone: Mapped[str] = mapped_column(String(40))
+    referral: Mapped[str] = mapped_column(String(2000), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cc_partners.id"), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

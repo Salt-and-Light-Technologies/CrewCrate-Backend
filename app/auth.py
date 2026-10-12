@@ -51,7 +51,8 @@ async def accessible_partner(
     partner_id: uuid.UUID, actor: Actor, session: AsyncSession, *, lock=False
 ) -> Partner:
     # Do not reveal another tenant's existence. Owner elevation is provisioned outside this API.
-    if not await is_owner(actor, session) and await session.get(Member, (partner_id, actor.user_id)) is None:
+    owner = await is_owner(actor, session)
+    if not owner and await session.get(Member, (partner_id, actor.user_id)) is None:
         raise HTTPException(404, "Partner not found")
     query = select(Partner).where(Partner.id == partner_id)
     if lock:
@@ -59,4 +60,6 @@ async def accessible_partner(
     partner = await session.scalar(query.execution_options(populate_existing=True))
     if partner is None:
         raise HTTPException(404, "Partner not found")
+    if not owner and not partner.access_approved:
+        raise HTTPException(403, "Your business is awaiting platform owner approval")
     return partner

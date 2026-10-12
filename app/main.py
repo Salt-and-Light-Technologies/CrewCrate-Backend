@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from .ai_tests import router as ai_test_router
+from .applications import router as application_router
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
 from .campaigns import get_campaign
 from .campaigns import router as campaign_router
@@ -58,6 +59,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(BodyLimitMiddleware)
+app.include_router(application_router)
 Session = Annotated[AsyncSession, Depends(get_session)]
 User = Annotated[Actor, Depends(current_actor)]
 OwnerUser = Annotated[Actor, Depends(require_owner)]
@@ -68,6 +70,7 @@ async def read_partner(partner, session):
     return PartnerRead(
         id=partner.id,
         name=partner.name,
+        access_approved=partner.access_approved,
         status=partner.status,
         revision=partner.revision,
         onboarding=partner.onboarding,
@@ -92,6 +95,7 @@ async def me(actor: User, session: Session):
 async def create_partner(body: PartnerCreate, actor: OwnerUser, session: Session):
     partner = Partner(
         name=body.name.strip(),
+        access_approved=True,
         onboarding={},
         readiness={},
         revision=0,
@@ -120,8 +124,12 @@ async def setup_business(body: BusinessProfile, actor: User, session: Session):
         .order_by(Partner.id).limit(1)
     )
     if existing:
+        await accessible_partner(existing.id, actor, session)
         return await read_partner(existing, session)
+    if not await is_owner(actor, session):
+        raise HTTPException(403, "Submit a business application and wait for platform approval")
     partner = Partner(name=body.business_name.strip(), onboarding=body.model_dump(),
+                      access_approved=True,
                       readiness={}, revision=0, status="draft",
                       updated_at=datetime.now(timezone.utc))
     session.add(partner)
@@ -162,6 +170,7 @@ async def partners(
     query = select(Partner)
     if not await is_owner(actor, session):
         query = query.join(Member, Member.partner_id == Partner.id).where(Member.user_id == actor.user_id)
+        query = query.where(Partner.access_approved.is_(True))
     if status:
         query = query.where(Partner.status == status.value)
     rows = (

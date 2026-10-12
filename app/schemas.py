@@ -99,6 +99,7 @@ class ORMModel(BaseModel):
 class PartnerRead(ORMModel):
     id: uuid.UUID
     name: str
+    access_approved: bool = False
     status: PartnerStatus
     revision: int
     onboarding: Onboarding

@@ -1,5 +1,26 @@
 # CrewCrate Revenue Recovery API
 
+## Current addition — platform approval for business signup
+
+Approval is now enforced independently of membership through `cc_partners.access_approved`.
+Apply `202610120002_business_access_gate.sql` after the business-application migration.
+Unapproved businesses are hidden from member lists and blocked at every partner-access
+check. Old self-service memberships no longer grant access. Public applications may bind
+to an existing unapproved workspace; owner approval unlocks it while preserving records.
+An owner explicitly provisioning a business through the protected owner endpoint grants
+business access. Access approval remains separate from campaign/pilot readiness.
+See BUSINESS_APPROVAL_FIX.md for the required rollout and Bob's test-account walkthrough.
+
+Business applications now use GET/POST `/v1/me/application`. Pending applicants receive
+no partner membership. Verified owners use GET `/v1/owner/applications` and POST
+`/v1/owner/applications/{id}/decision` with expected_revision to approve/deny; approval
+creates an isolated draft workspace, not sending permission or pilot readiness.
+Unassigned non-owners can no longer bypass review using POST `/v1/me/business`.
+Existing assigned business accounts continue to work. Apply the new additive migration
+before deployment; see BUSINESS_ACCESS_SETUP.md. No deployment or live migration was
+performed. The iOS app now uses the live business-access endpoints; older demo/iOS
+integration claims below are historical.
+
 Active backend for the CrewCrate rebuild, reusing the original FastAPI, Supabase Auth/Postgres and Render foundation. The archived original is a reference and remains untouched. This version is local code; no deployment or database migration has been performed.
 
 ## Run locally

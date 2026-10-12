@@ -3945,6 +3945,11 @@
             "title": "Permission Attested",
             "default": false
           },
+          "eligible_recipients_only": {
+            "type": "boolean",
+            "title": "Eligible Recipients Only",
+            "default": false
+          },
           "sheet": {
             "anyOf": [
               {
@@ -4318,6 +4323,7 @@
             "type": "string",
             "maxLength": 2000,
             "title": "Qualification",
+            "description": "Optional additional strong-response signal; never a handoff requirement",
             "default": ""
           },
           "handoff_email": {
@@ -4325,6 +4331,30 @@
             "maxLength": 320,
             "title": "Handoff Email",
             "default": ""
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
           },
           "time_zone": {
             "type": "string",
@@ -4374,6 +4404,7 @@
           },
           "daily_limit": {
             "type": "integer",
+            "maximum": 1000.0,
             "minimum": 1.0,
             "title": "Daily Limit",
             "default": 25
@@ -4954,6 +4985,28 @@
           "issues_truncated": {
             "type": "boolean",
             "title": "Issues Truncated"
+          },
+          "eligible_count": {
+            "type": "integer",
+            "title": "Eligible Count",
+            "default": 0
+          },
+          "excluded_count": {
+            "type": "integer",
+            "title": "Excluded Count",
+            "default": 0
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/ImportPreviewContact"
+            },
+            "type": "array",
+            "title": "Contacts"
+          },
+          "contacts_truncated": {
+            "type": "boolean",
+            "title": "Contacts Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -4967,6 +5020,52 @@
           "issues_truncated"
         ],
         "title": "ImportPreview"
+      },
+      "ImportPreviewContact": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "sms_permission": {
+            "type": "string",
+            "title": "Sms Permission"
+          },
+          "opted_out": {
+            "type": "boolean",
+            "title": "Opted Out"
+          },
+          "eligible_for_sms": {
+            "type": "boolean",
+            "title": "Eligible For Sms"
+          },
+          "exclusion_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclusion Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "phone",
+          "name",
+          "sms_permission",
+          "opted_out",
+          "eligible_for_sms",
+          "exclusion_reasons"
+        ],
+        "title": "ImportPreviewContact"
       },
       "ImportRead": {
         "properties": {
@@ -5710,6 +5809,36 @@
             "type": "boolean",
             "const": true,
             "title": "Simulated"
+          },
+          "human_requested": {
+            "type": "boolean",
+            "title": "Human Requested",
+            "default": false
+          },
+          "default_qualified": {
+            "type": "boolean",
+            "title": "Default Qualified",
+            "default": false
+          },
+          "additional_signal": {
+            "type": "string",
+            "title": "Additional Signal",
+            "default": "unknown"
+          },
+          "signal_evidence": {
+            "type": "string",
+            "title": "Signal Evidence",
+            "default": ""
+          },
+          "signal_reason": {
+            "type": "string",
+            "title": "Signal Reason",
+            "default": ""
+          },
+          "strong_response": {
+            "type": "boolean",
+            "title": "Strong Response",
+            "default": false
           }
         },
         "type": "object",

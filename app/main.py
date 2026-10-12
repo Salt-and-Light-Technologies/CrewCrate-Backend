@@ -19,7 +19,7 @@ from .config import get_settings
 from .contact_policy import eligible_expression
 from .database import get_session
 from .deletion import router as deletion_router
-from .imports import MAX_BYTES, preview_rows
+from .imports import MAX_BYTES, apply_import_preferences, preview_eligibility, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
 from .owner_analytics import router as owner_analytics_router
@@ -294,14 +294,15 @@ async def import_leads(
     check_revision(partner, expected_revision)
     if partner.status == "paused":
         raise HTTPException(409, "CSV uploads are unavailable while the partner is paused")
-    existing = set((await session.scalars(select(Lead.phone).where(Lead.partner_id == partner_id))).all())
+    existing = {lead.phone: lead for lead in (await session.scalars(select(Lead).where(Lead.partner_id == partner_id))).all()}
     accepted, duplicates, _ = preview_rows(parsed, existing)
-    # Persist summaries and normalized contacts only; original files are discarded.
+    # Retain parsed source rows for audit; original binary files are discarded.
     name = PurePath((file.filename or "leads.csv").replace("\\", "/")).name[:200]
     batch = LeadImport(
         partner_id=partner_id,
         actor_id=actor.user_id,
         file_name=name,
+        raw_rows=parsed.raw_rows,
         total_rows=parsed.total,
         imported=len(accepted),
         duplicates=duplicates,
@@ -310,7 +311,13 @@ async def import_leads(
     session.add(batch)
     await session.flush()
     for contact in accepted:
-        session.add(Lead(partner_id=partner_id, import_id=batch.id, **contact))
+        lead = Lead(partner_id=partner_id, import_id=batch.id, **contact)
+        session.add(lead)
+        existing[lead.phone] = lead
+    for contact in parsed.contacts:
+        lead = existing[contact["phone"]]
+        if apply_import_preferences(lead, contact):
+            lead.revision = (lead.revision or 0) + 1
     partner.readiness = {}
     record_event(
         partner,
@@ -504,7 +511,7 @@ async def preview_import(
         parsed = await run_in_threadpool(parse_file, await file.read(MAX_BYTES + 1), file.filename, sheet, phone_column, name_column, email_column, permission_columns, permission_attested)
     finally:
         await file.close()
-    existing = (await session.scalars(select(Lead.phone).where(Lead.partner_id == partner_id))).all()
+    existing = {lead.phone: lead for lead in (await session.scalars(select(Lead).where(Lead.partner_id == partner_id))).all()}
     accepted, duplicates, issues = preview_rows(parsed, existing)
     return ImportPreview(
         partner_revision=partner.revision,
@@ -514,6 +521,7 @@ async def preview_import(
         invalid=parsed.invalid,
         issues=issues[:100],
         issues_truncated=len(issues) > 100,
+        **preview_eligibility(parsed, existing),
     )
 
 

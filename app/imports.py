@@ -3,8 +3,11 @@ import io
 import json
 import re
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from fastapi import HTTPException
+
+from .contact_policy import exclusion_reasons
 
 MAX_BYTES = 5_000_000
 MAX_ROWS = 20000
@@ -16,6 +19,7 @@ class ParsedCSV:
     total: int
     invalid: int
     issues: list[dict]
+    raw_rows: list[dict]
 
 
 def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_column: str | None, permission_columns: str = "{}", permission_attested: bool = False):
@@ -36,7 +40,7 @@ def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_colu
         mapping = [phone_column] + [x for x in (name_column, email_column) if x] + [v for v in permissions.values() if v]
         if any(x not in headers for x in mapping) or len(set(mapping)) != len(mapping):
             raise ValueError("Choose distinct mapped columns")
-        contacts, invalid, total, issues = [], 0, 0, []
+        contacts, invalid, total, issues, raw_rows = [], 0, 0, [], []
         for row in reader:
             if not row or not any(x.strip() for x in row):
                 continue
@@ -46,6 +50,7 @@ def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_colu
             if len(row) != len(headers):
                 raise ValueError("CSV row does not match headers")
             values = dict(zip(headers, row))
+            raw_rows.append({"row_number": total, "values": values})
             phone = re.sub(r"[+(). -]", "", values[phone_column].strip())
             name = values.get(name_column, "").strip()
             email = values.get(email_column, "").strip()
@@ -80,7 +85,7 @@ def parse_csv(raw: bytes, phone_column: str, name_column: str | None, email_colu
             contacts.append(contact)
         if not total:
             raise ValueError("CSV contains no records")
-        return ParsedCSV(contacts, total, invalid, issues)
+        return ParsedCSV(contacts, total, invalid, issues, raw_rows)
     except (UnicodeDecodeError, StopIteration, csv.Error, ValueError):
         raise HTTPException(422, "Invalid UTF-8 CSV, distinct column mapping or row structure") from None
 
@@ -112,3 +117,55 @@ def preview_rows(parsed, existing):
             accepted.append({k: v for k, v in contact.items() if k != "row_number"})
     issues.sort(key=lambda x: x["row_number"])
     return accepted, duplicates, issues
+
+
+def apply_import_preferences(lead, contact):
+    """Shared real/projected merge; opt-outs are sticky, including duplicate rows."""
+    if "sms_permission" not in contact:
+        return False
+    if contact["opted_out"]:
+        lead.opted_out = True
+        lead.sms_permission = "revoked"
+        lead.status = "excluded"
+        lead.permission_evidence = contact["permission_evidence"] or "Imported opt-out"
+        return True
+    if not lead.opted_out and lead.sms_permission != "revoked" and contact["sms_permission"] == "recorded":
+        if contact["permission_evidence"].startswith("[TEST ONLY]") and lead.permission_evidence and not lead.permission_evidence.startswith("[TEST ONLY]"):
+            return False
+        lead.sms_permission = "recorded"
+        lead.status = "eligible"
+        lead.permission_evidence = ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") and not contact["permission_evidence"].startswith("[TEST ONLY]") else "") + contact["permission_evidence"]
+        return True
+    return False
+
+
+def preview_eligibility(parsed, existing):
+    """Project exactly the post-import preferences without mutating stored leads."""
+    projected, first_rows = {}, {}
+    keys = ("phone", "name", "sms_permission", "permission_evidence", "opted_out", "status")
+    for contact in parsed.contacts:
+        phone = contact["phone"]
+        if phone not in projected:
+            prior = existing.get(phone)
+            projected[phone] = SimpleNamespace(**(
+                {k: getattr(prior, k) for k in keys} if prior else {
+                    "phone": phone, "name": contact["name"],
+                    "sms_permission": contact.get("sms_permission", "unknown"),
+                    "permission_evidence": contact.get("permission_evidence", ""),
+                    "opted_out": contact.get("opted_out", False),
+                    "status": contact.get("status", "unreviewed"),
+                }
+            ))
+            first_rows[phone] = contact["row_number"]
+        apply_import_preferences(projected[phone], contact)
+    rows = []
+    for phone, lead in projected.items():
+        reasons = exclusion_reasons(lead)
+        rows.append(dict(row_number=first_rows[phone], phone=phone, name=lead.name,
+                         sms_permission=lead.sms_permission, opted_out=lead.opted_out,
+                         eligible_for_sms=not reasons, exclusion_reasons=reasons))
+    eligible = [r for r in rows if r["eligible_for_sms"]]
+    excluded = [r for r in rows if not r["eligible_for_sms"]]
+    return dict(eligible_count=len(eligible), excluded_count=len(excluded),
+                contacts=eligible[:100] + excluded[:100],
+                contacts_truncated=len(eligible) > 100 or len(excluded) > 100)

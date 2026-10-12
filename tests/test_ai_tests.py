@@ -99,7 +99,7 @@ async def test_stop_and_no_live_mutation(client, agent, text, status, decision):
 async def test_handoff_idempotence_revisions(client, agent):
     _, url, test = await start(client, agent)
     agent.next = AgentDecision(reply="Ready for sales.", decision="handoff", reason="Requested sales",
-                               handoff_summary="Lead asked for a call.")
+                               handoff_summary="Lead asked for a call.", human_requested=True)
     request_id = str(uuid.uuid4())
     response = await send(client, url, test, "Have sales call me", request_id)
     assert response.status_code == 200
@@ -263,3 +263,24 @@ async def test_incomplete_retry_bounded_and_logs_private(monkeypatch, caplog, re
         assert "category=" in caplog.text
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("signal,qualified,strong", [
+    ("unknown", True, False), ("unmet", True, False),
+    ("matched", True, True), ("matched", False, False),
+])
+async def test_persisted_additive_signal(client, agent, signal, qualified, strong):
+    _, url, test = await start(client, agent)
+    agent.next = AgentDecision(
+        reply="Thanks for the details.", decision="continue", reason="Evaluated needs",
+        handoff_summary="Lead wants roof help." if qualified else "",
+        default_qualified=qualified, additional_signal=signal,
+        signal_evidence="I am a homeowner", signal_reason="Lead confirms home ownership.",
+    )
+    response = await send(client, url, test, "I am a homeowner")
+    assert response.status_code == 200
+    saved = (await client.get(f"{url}/{test['id']}")).json()
+    outcome = saved["decisions"][-1]
+    assert saved["status"] == ("handoff" if qualified else "active")
+    assert outcome["strong_response"] is strong
+    assert outcome["signal_evidence"] == ("I am a homeowner" if signal == "matched" else "")

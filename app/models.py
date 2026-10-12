@@ -53,6 +53,7 @@ class LeadImport(Base):
     partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     file_name: Mapped[str] = mapped_column(String(200))
+    raw_rows: Mapped[list] = mapped_column(JSON, default=list)
     total_rows: Mapped[int] = mapped_column(Integer)
     imported: Mapped[int] = mapped_column(Integer)
     duplicates: Mapped[int] = mapped_column(Integer)

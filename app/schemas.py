@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -168,6 +168,16 @@ class ImportIssue(BaseModel):
     detail: str
 
 
+class ImportPreviewContact(BaseModel):
+    row_number: int
+    phone: str
+    name: str
+    sms_permission: str
+    opted_out: bool
+    eligible_for_sms: bool
+    exclusion_reasons: list[str]
+
+
 class ImportPreview(BaseModel):
     partner_revision: int
     total_rows: int
@@ -176,6 +186,10 @@ class ImportPreview(BaseModel):
     invalid: int
     issues: list[ImportIssue]
     issues_truncated: bool
+    eligible_count: int = 0
+    excluded_count: int = 0
+    contacts: list[ImportPreviewContact] = Field(default_factory=list)
+    contacts_truncated: bool = False
 
 
 class LeadWorkspaceRead(BaseModel):
@@ -200,16 +214,26 @@ class CampaignConfig(BaseModel):
     ai_brief: str | None = Field(default=None, max_length=10000)
     ai_name: str | None = Field(default=None, max_length=100)
     message_template: str = Field(default="", max_length=480)
-    qualification: str = Field(default="", max_length=2000)
+    qualification: str = Field(default="", max_length=2000, description="Optional additional strong-response signal; never a handoff requirement")
     handoff_email: str = Field(default="", max_length=320)
+    start_date: date | None = None
+    end_date: date | None = None
     time_zone: str = Field(default="America/Chicago", max_length=100)
     start_minute: int | None = Field(default=None, ge=0, le=59)
     end_minute: int | None = Field(default=None, ge=0, le=59)
     start_hour: int = Field(default=9, ge=9, le=17)
     end_hour: int = Field(default=17, ge=9, le=17)
-    daily_limit: int = Field(default=25, ge=1)
+    daily_limit: int = Field(default=25, ge=1, le=1000)
     follow_up_limit: int = Field(default=1, ge=0, le=3)
     lead_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10000)
+
+    @model_validator(mode="after")
+    def valid_date_range(self):
+        if (self.start_date is None) != (self.end_date is None):
+            raise ValueError("Provide both campaign dates or neither")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("Campaign start date must be on or before end date")
+        return self
 
 
 class CampaignUpdate(RevisionRequest):

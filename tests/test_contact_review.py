@@ -165,6 +165,7 @@ async def test_ai_generates_opening_and_failure_preserves_draft(client):
     prepared = await client.post(path + "/prepare", json=dict(expected_revision=1))
     assert prepared.status_code == 200
     assert prepared.json()["config"]["message_template"].startswith("Hi, I'm Maddie")
+    assert contexts[-1]["ai_name"] == value["ai_name"]
     assert contexts[-1]["ai_instructions"] == value["ai_brief"]
     assert contexts[-1]["qualification"] == value["qualification"]
     assert contexts[-1]["offer"] == value["offer"]

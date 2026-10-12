@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from .auth import Actor, accessible_partner, current_actor, is_owner, require_owner
+from .campaign_schedule import campaign_date_eligible
 from .contact_policy import exclusion_reasons
 from .database import get_session
-from .imports import MAX_BYTES, preview_rows
+from .imports import MAX_BYTES, apply_import_preferences, preview_rows
 from .models import Campaign, CampaignEvent, Conversation, ConversationEvent, Lead, LeadImport, Partner
 from .schemas import (
     CampaignConfig,
@@ -80,7 +81,7 @@ async def campaign_read(partner, campaign, session):
     blockers = launch_issues(partner, all_count)
     if partner.status != "pilot_approved":
         blockers.append("Partner setup must be pilot approved")
-    for field in ("offer", "qualification"):
+    for field in ("offer",):
         if not getattr(config, field).strip():
             blockers.append("Complete " + field.replace("_", " "))
     if not email_valid(config.handoff_email):
@@ -364,6 +365,8 @@ async def launch(
         raise HTTPException(422, "Check campaign readiness to generate the AI opening message first")
     if not re.search(r"\breply\s+stop\s+to\s+opt\s+out\b", snapshot.config.message_template, re.IGNORECASE):
         raise HTTPException(422, "Include Reply STOP to opt out in your opening SMS")
+    if not campaign_date_eligible(snapshot.config, datetime.now(timezone.utc)):
+        raise HTTPException(422, "Campaign is outside its selected dates in the business time zone. Nothing was queued or sent.")
     # Intentional integration boundary: no job, fake receipt or delivery side effect.
     raise HTTPException(503, "SMS provider connection required. Nothing was queued or sent.")
 
@@ -541,6 +544,7 @@ async def campaign_import(
     email_column: str | None = Form(default=None, max_length=200),
     permission_columns: str = Form(default="{}", max_length=2000),
     permission_attested: bool = Form(default=False),
+    eligible_recipients_only: bool = Form(default=False),
     sheet: str | None = Form(default=None, max_length=200),
     campaign_id: uuid.UUID | None = Form(default=None),
     expected_revision: int | None = Form(default=None, ge=0),
@@ -597,6 +601,7 @@ async def campaign_import(
         partner_id=partner_id,
         actor_id=actor.user_id,
         file_name=PurePath((file.filename or "leads.csv").replace("\\", "/")).name[:200],
+        raw_rows=parsed.raw_rows,
         total_rows=parsed.total,
         imported=len(accepted),
         duplicates=duplicates,
@@ -612,21 +617,7 @@ async def campaign_import(
     # Apply permission data to duplicates conservatively; never re-enable an opt-out.
     for contact in parsed.contacts:
         lead = existing[contact["phone"]]
-        if "sms_permission" not in contact:
-            continue
-        if contact["opted_out"]:
-            lead.opted_out = True
-            lead.sms_permission = "revoked"
-            lead.status = "excluded"
-            lead.permission_evidence = contact["permission_evidence"] or "Imported opt-out"
-            lead.revision += 1
-        elif not lead.opted_out and lead.sms_permission != "revoked" and contact["sms_permission"] == "recorded":
-            # Test records cannot overwrite a real contact's permission.
-            if contact["permission_evidence"].startswith("[TEST ONLY]") and lead.permission_evidence and not lead.permission_evidence.startswith("[TEST ONLY]"):
-                continue
-            lead.sms_permission = "recorded"
-            lead.status = "eligible"
-            lead.permission_evidence = ("[TEST ONLY] " if lead.permission_evidence.startswith("[TEST ONLY]") and not contact["permission_evidence"].startswith("[TEST ONLY]") else "") + contact["permission_evidence"]
+        if apply_import_preferences(lead, contact):
             lead.revision += 1
 
     attached = list(dict.fromkeys(body.lead_ids + [existing[c["phone"]].id for c in parsed.contacts]))
@@ -641,6 +632,9 @@ async def campaign_import(
     )
     if scoped != set(attached):
         raise HTTPException(422, "Recipients must belong to this business")
+    if eligible_recipients_only:
+        by_id = {lead.id: lead for lead in existing.values()}
+        attached = [lead_id for lead_id in attached if not exclusion_reasons(by_id[lead_id])]
     body.lead_ids = attached
     campaign.config = body.model_dump(mode="json")
     campaign.status = "draft"

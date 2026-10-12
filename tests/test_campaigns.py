@@ -151,7 +151,17 @@ async def test_campaign_tenant_scope_limits_and_missing_checks(client):
     ).status_code == 404
     too_many = config(lead)
     too_many["daily_limit"] = 1000
-    assert (await client.post(url + "/campaigns", json=too_many)).status_code == 201
+    boundary = await client.post(url + "/campaigns", json=too_many)
+    assert boundary.status_code == 201
+    boundary = boundary.json()
+    updated_boundary = await client.put(url + "/campaigns/" + boundary["id"], json={
+        "expected_revision": boundary["revision"], "config": too_many,
+    })
+    assert updated_boundary.status_code == 200
+    assert updated_boundary.json()["config"]["daily_limit"] == 1000
+    too_many["daily_limit"] = 1001
+    assert (await client.post(url + "/campaigns", json=too_many)).status_code == 422
+    assert (await client.put(path, json={"expected_revision": 1, "config": too_many})).status_code == 422
     too_many["daily_limit"] = 0
     assert (await client.post(url + "/campaigns", json=too_many)).status_code == 422
     invalid = config(lead)

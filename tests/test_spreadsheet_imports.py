@@ -112,12 +112,13 @@ async def test_campaign_permission_columns_and_duplicate_optouts(client):  # noq
     assert result.status_code == 200, result.text
     leads = (await client.get(path + '/leads')).json()
     byphone = {lead['phone']:lead for lead in leads}
-    assert byphone['12025550101']['eligible_for_sms']
+    assert not byphone['12025550101']['eligible_for_sms']
+    assert any('Test-only' in reason for reason in byphone['12025550101']['exclusion_reasons'])
     assert not byphone['12025550102']['eligible_for_sms']
     assert byphone['12025550103']['opted_out']
     assert any('Test-only' in b for b in result.json()['blockers'])
     ids = (await client.get(path + '/eligible-recipient-ids')).json()
-    assert ids == [byphone['12025550101']['id']]
+    assert ids == []
     current = (await client.get(path)).json()
     retry = b'Phone,Permission,Evidence,Optout,Test\n12025550103,recorded,SIMULATED new consent,false,true\n'
     result2 = await client.post(path + '/campaign-import', files={'file':('retry.csv', retry)}, data={'config':'{"name":"Retry"}', 'phone_column':'Phone','permission_columns':mapping,'expected_partner_revision':str(current['revision'])})

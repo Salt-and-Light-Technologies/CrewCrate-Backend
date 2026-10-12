@@ -92,7 +92,7 @@ No new database tables or migrations are required for this phase beyond the exis
 
 Apply `202610080002_campaign_planning.sql` after the initial cc_* migration in a development database first. It adds four planning/tracking tables plus permission/evidence/opt-out columns to the new cc_leads table. Legacy CRM tables are untouched. RLS/direct-access revocations apply to the new tables too. Neither migration has been applied by this build.
 
-Partners manage their own campaigns after foundational partner setup has been approved. There is no per-campaign owner approval endpoint or required owner-review state. Routes under `/v1/partners/{partner_id}/campaigns` support list/create, GET/PUT detail, POST `/prepare`, POST `/control`, and GET `/history`. `/v1/owner/campaigns` provides paginated cross-partner oversight. Revision checks, partner row locks and transactionally appended campaign events protect changes. Saving resets preparation. Preparation checks current recipient eligibility, recorded SMS permission/evidence, opt-outs, setup readiness and plan validity. Limits are up to 500 distinct recipients, 100 contacts/day, three planned follow-ups, a 9–17 planned window and a 480-character first-message draft. These are planning constraints; no scheduler runs, no segments are estimated and no actual sends occur.
+Partners manage their own campaigns after foundational partner setup has been approved. There is no per-campaign owner approval endpoint or required owner-review state. Routes under `/v1/partners/{partner_id}/campaigns` support list/create, GET/PUT detail, POST `/prepare`, POST `/control`, and GET `/history`. `/v1/owner/campaigns` provides paginated cross-partner oversight. Revision checks, partner row locks and transactionally appended campaign events protect changes. Saving resets preparation. Preparation checks current recipient eligibility, recorded SMS permission/evidence, opt-outs, setup readiness and plan validity. Limits are up to 10,000 distinct recipients, 1,000 planned leads/day, three planned follow-ups, a 9–17 planned window and a 480-character first-message draft. These are planning constraints; no scheduler runs, no segments are estimated and no actual sends occur.
 
 Owner pause sets `owner_hold`; partners cannot resume, edit or archive an owner-held campaign. Owner resume clears the hold and returns it to draft. Partner-created pauses can be resumed by that partner. Global partner pause also blocks preparation. GET detail reports `needs_recheck` and blockers when partner or recipient revisions differ from the prepared snapshot. An owner hold applies to that campaign; use the existing global partner pause when all partner activity needs to stop.
 
@@ -154,8 +154,8 @@ batch and leads together. Foreign-business recipient IDs are rejected. Re-upload
 contacts does not grant SMS consent. Saving resets campaign preparation to draft and
 business readiness as in the existing import workflow. Pauses and owner holds remain.
 
-Only normalized contact records, file name and import counts are stored; original files
-are discarded. There is no provider delivery. Deploy backend first: Render's existing
+Normalized contact records, file name, import counts and parsed source rows are stored;
+original binary files are discarded. Source-row retention requires the audit migration below. There is no provider delivery. Deploy backend first: Render's existing
 `pip install .` build installs openpyxl/defusedxml. No database migration is needed.
 Tests cover formats/worksheet selection, malformed files/formulas, atomic rollback,
 revision conflicts, access isolation, duplicates and retained suppression records.
@@ -171,3 +171,40 @@ Campaigns accept up to 10,000 distinct contacts. Lead review loads 250 contacts 
 `GET /v1/partners/{id}/eligible-recipient-ids` returns up to 10,000 eligible IDs for the requested campaign/import/search, enabling Select all across unloaded pages without fetching contact details. Larger results require narrowing the query. Recipient save still rechecks permissions and scope. Campaign lead-list removal clears associations and resets preparation while retaining contact and suppression records.
 
 Contact import and preview accept optional `permission_columns` JSON mapping (permission/evidence/optout/test → column name) and `permission_attested` boolean. Recorded/yes/true needs evidence plus attestation or a test marker; revoked/no/false or opt-out blocks the contact. Test-only evidence is retained and blocks campaign preparation for real outreach. Campaign re-import applies permission data to reused unknown contacts, preserving opt-outs and existing real records against test overrides. No migration is required.
+
+### Shared AI behavior and additional campaign signal
+
+See [AI_BEHAVIOR.md](AI_BEHAVIOR.md) for the shared partner-identity rules, optional
+additive strong-response criterion, server routing/evidence checks and delivery limits.
+The stored `qualification` field is no longer a mandatory readiness gate.
+
+### Spreadsheet permission mappings and eligibility preview
+
+The shared iOS New/Edit upload flow exposes SMS permission, Permission evidence and
+Opted out mappings, with unambiguous header preselection and explicit business review
+attestation. Preview and save send identical mappings. Missing/unknown permission,
+missing evidence or missing attestation cannot grant real consent; unsupported values
+reject the file. An opt-out takes precedence and cannot be cleared by re-import.
+
+Preview returns full distinct-contact eligible/excluded counts plus up to 100 rows per
+category with reasons, using projected stored preferences and the central eligibility
+policy. It stores nothing. The UI defaults to eligible-only display; this filter is not
+a send/selection authorization. All valid contacts, including excluded ones, remain
+stored. The app requests `eligible_recipients_only=true` for campaign import; it retains all
+valid contact records but selects only eligible recipients. Legacy API requests default
+to retaining associations; preparation rejects excluded recipients and recipient-save
+strips them regardless of UI filtering. Test-only contacts are now excluded
+by both Python and SQL eligibility, rather than only the final preparation blocker.
+
+Before deployment, manually apply `202610120001_import_row_audit.sql` in development,
+then review production rollout. It adds `cc_lead_imports.raw_rows` JSON for parsed
+source values/row numbers, including invalid and opted-out rows in successful imports.
+Old batches default to an empty array; failed files are not committed. Existing RLS
+and grants remain. The raw audit data stays on the backend and is not fed to AI or
+included in ordinary contact/API list responses. No migration or deployment was run.
+
+123 local backend tests and standalone Swift checks pass, covering CSV/Excel parity,
+mixed consent, evidence/attestation, sticky stored and duplicate-row opt-outs, rejected
+unknown values, source-row retention, recipient filtering and frontend mapping payload
+parity. SwiftUI syntax parsing/diff checks pass; device validation remains manual.
+Live SMS, inbound AI and external suppression remain disabled.

@@ -97,6 +97,7 @@ class ORMModel(BaseModel):
 
 
 class PartnerRead(ORMModel):
+    member_role: str = "admin"
     id: uuid.UUID
     name: str
     access_approved: bool = False

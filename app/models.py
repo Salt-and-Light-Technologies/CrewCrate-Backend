@@ -29,6 +29,9 @@ class Partner(Base):
 
 class Member(Base):
     __tablename__ = "cc_partner_members"
+    role: Mapped[str] = mapped_column(String(20), default="admin")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    display_name: Mapped[str] = mapped_column(String(200), default="")
     partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
 
@@ -155,3 +158,48 @@ class BusinessApplication(Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WorkerInvitation(Base):
+    __tablename__ = "cc_worker_invitations"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
+    email: Mapped[str] = mapped_column(String(320))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_by: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class WorkerNotification(Base):
+    __tablename__ = "cc_worker_notifications"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_conversations.id", ondelete="CASCADE"))
+    event_revision: Mapped[int] = mapped_column(Integer)
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("user_id", "conversation_id", "event_revision"),)
+
+
+class WorkerDevice(Base):
+    __tablename__ = "cc_worker_devices"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    token: Mapped[str] = mapped_column(String(200), unique=True)
+    environment: Mapped[str] = mapped_column(String(20))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class WorkerPushJob(Base):
+    __tablename__ = "cc_worker_push_jobs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    notification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_worker_notifications.id", ondelete="CASCADE"))
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_worker_devices.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("notification_id", "device_id"),)

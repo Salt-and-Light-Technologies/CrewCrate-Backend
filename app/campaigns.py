@@ -482,6 +482,7 @@ async def update_conversation(
     revision(conversation, body.expected_revision)
     if len(body.note.strip()) < 5:
         raise HTTPException(422, "Add an internal tracking note")
+    previous_status = conversation.status
     conversation.status = body.status
     conversation.revision += 1
     conversation.updated_at = datetime.now(timezone.utc)
@@ -494,6 +495,8 @@ async def update_conversation(
             revision=conversation.revision,
         )
     )
+    from .workers import notify_interested
+    await notify_interested(session, partner_id, conversation, previous_status)
     event(campaign, actor, "tracking_updated", f"Manual record {conversation.id}: {body.status}", session)
     await session.commit()
     return conversation

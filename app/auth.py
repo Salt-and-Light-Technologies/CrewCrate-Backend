@@ -14,6 +14,8 @@ from .models import Member, Owner, Partner
 @dataclass(frozen=True)
 class Actor:
     user_id: uuid.UUID
+    email: str | None = None
+    email_verified: bool = False
 
 
 async def current_actor(authorization: str | None = Header(default=None)) -> Actor:
@@ -30,7 +32,8 @@ async def current_actor(authorization: str | None = Header(default=None)) -> Act
             raise HTTPException(401, "Invalid access token")
         if response.status_code != 200:
             raise HTTPException(503, "Authentication service unavailable")
-        return Actor(uuid.UUID(response.json()["id"]))
+        user = response.json()
+        return Actor(uuid.UUID(user["id"]), user.get("email"), bool(user.get("email_confirmed_at")))
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         raise HTTPException(503, "Authentication service unavailable") from None
 
@@ -48,18 +51,23 @@ async def require_owner(
 
 
 async def accessible_partner(
-    partner_id: uuid.UUID, actor: Actor, session: AsyncSession, *, lock=False
+    partner_id: uuid.UUID, actor: Actor, session: AsyncSession, *, lock=False, allow_worker=False
 ) -> Partner:
     # Do not reveal another tenant's existence. Owner elevation is provisioned outside this API.
     owner = await is_owner(actor, session)
-    if not owner and await session.get(Member, (partner_id, actor.user_id)) is None:
-        raise HTTPException(404, "Partner not found")
     query = select(Partner).where(Partner.id == partner_id)
     if lock:
         query = query.with_for_update()
     partner = await session.scalar(query.execution_options(populate_existing=True))
     if partner is None:
         raise HTTPException(404, "Partner not found")
+    if not owner:
+        member = await session.scalar(select(Member).where(Member.partner_id == partner_id,
+            Member.user_id == actor.user_id).execution_options(populate_existing=True))
+        if member is None or not member.active:
+            raise HTTPException(404, "Partner not found")
+        if member.role != "admin" and not allow_worker:
+            raise HTTPException(403, "Business administrator access required")
     if not owner and not partner.access_approved:
         raise HTTPException(403, "Your business is awaiting platform owner approval")
     return partner

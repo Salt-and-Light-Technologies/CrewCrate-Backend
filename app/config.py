@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     allowed_origins: str = ""
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-4o-mini"
+    apns_key_id: str = ""
+    apns_team_id: str = ""
+    apns_topic: str = ""
+    apns_private_key: SecretStr | None = None
 
     @property
     def cors_origins(self) -> list[str]:

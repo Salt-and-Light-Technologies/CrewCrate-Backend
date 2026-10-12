@@ -43,6 +43,7 @@ from .schemas import (
     SalesHandoffEmailAdd,
 )
 from .spreadsheet_imports import decode_sheet, parse_file
+from .workers import router as worker_router
 from .workflow import (
     apply_decision,
     check_revision,
@@ -172,7 +173,7 @@ async def partners(
     query = select(Partner)
     if not await is_owner(actor, session):
         query = query.join(Member, Member.partner_id == Partner.id).where(Member.user_id == actor.user_id)
-        query = query.where(Partner.access_approved.is_(True))
+        query = query.where(Partner.access_approved.is_(True), Member.active.is_(True))
     if status:
         query = query.where(Partner.status == status.value)
     rows = (
@@ -180,7 +181,18 @@ async def partners(
             query.order_by(Partner.updated_at.desc(), Partner.id).limit(limit).offset(offset)
         )
     ).all()
-    return [await read_partner(row, session) for row in rows]
+    result = []
+    for row in rows:
+        member = await session.get(Member, (row.id, actor.user_id))
+        item = await read_partner(row, session)
+        item.member_role = member.role if member else "platform_owner"
+        if member and member.role == "worker":
+            from .schemas import Onboarding, Readiness
+            item.onboarding = Onboarding()
+            item.readiness = Readiness()
+            item.missing_launch_requirements = []
+        result.append(item)
+    return result
 
 
 @app.get("/v1/partners/{partner_id}", response_model=PartnerRead)
@@ -582,3 +594,4 @@ async def add_handoff_email(partner_id: uuid.UUID, body: SalesHandoffEmailAdd, a
 app.include_router(ai_test_router)
 
 app.include_router(deletion_router)
+app.include_router(worker_router)

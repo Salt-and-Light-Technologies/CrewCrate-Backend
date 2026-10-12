@@ -208,3 +208,16 @@ mixed consent, evidence/attestation, sticky stored and duplicate-row opt-outs, r
 unknown values, source-row retention, recipient filtering and frontend mapping payload
 parity. SwiftUI syntax parsing/diff checks pass; device validation remains manual.
 Live SMS, inbound AI and external suppression remain disabled.
+
+### Campaign list deletion
+
+The current iOS business campaign list now uses the existing authenticated DELETE
+`/v1/partners/{partner_id}/campaigns/{campaign_id}?expected_revision=N` route. Named
+confirmation, success-only row removal and refresh/error handling are implemented.
+Partner membership/owner access, locks, revisions and owner-hold rejection are retained.
+Deletion removes campaign-specific tracking/history and campaign-linked practice sessions;
+business contacts, opt-outs, import batches and parsed-row audit data remain. A partner
+history event records the deleted name/ID. There is no live scheduler/provider work to
+cancel, and no new migration or deployment was performed for this follow-up.
+126 local backend tests pass; standalone Swift deletion checks and Ruff pass. Device
+UI validation remains manual, with no full iOS app build run.

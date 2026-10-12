@@ -29,7 +29,7 @@ async def delete_campaign(partner_id: uuid.UUID, campaign_id: uuid.UUID, actor: 
     await session.execute(delete(AITestSession).where(AITestSession.campaign_id == campaign_id))
     await session.execute(delete(CampaignEvent).where(CampaignEvent.campaign_id == campaign_id))
     await session.execute(delete(Campaign).where(Campaign.id == campaign_id))
-    record_event(partner, actor, "campaign_deleted", partner.status, f"Deleted campaign {campaign_id}", session)
+    record_event(partner, actor, "campaign_deleted", partner.status, f"Deleted campaign {campaign.config.get('name', '')} ({campaign_id})", session)
     await session.commit()
     return Response(status_code=204)
 

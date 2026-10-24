@@ -203,3 +203,24 @@ class WorkerPushJob(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (UniqueConstraint("notification_id", "device_id"),)
+
+
+class CalendarConnection(Base):
+    __tablename__ = "cc_google_calendar_connections"
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id", ondelete="CASCADE"), primary_key=True)
+    refresh_token: Mapped[str] = mapped_column(Text)
+    access_token: Mapped[str] = mapped_column(Text)
+    access_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    calendar_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    calendar_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class CalendarOAuthState(Base):
+    __tablename__ = "cc_google_calendar_oauth_states"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    partner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cc_partners.id", ondelete="CASCADE"), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column()
+    verifier: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

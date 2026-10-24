@@ -19,6 +19,7 @@ from .config import get_settings
 from .contact_policy import eligible_expression
 from .database import get_session
 from .deletion import router as deletion_router
+from .google_calendar import router as google_calendar_router
 from .imports import MAX_BYTES, apply_import_preferences, preview_eligibility, preview_rows
 from .limits import BodyLimitMiddleware
 from .models import Event, Lead, LeadImport, Member, Partner
@@ -595,3 +596,5 @@ app.include_router(ai_test_router)
 
 app.include_router(deletion_router)
 app.include_router(worker_router)
+
+app.include_router(google_calendar_router)

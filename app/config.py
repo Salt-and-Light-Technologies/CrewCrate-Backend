@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     apns_topic: str = ""
     apns_private_key: SecretStr | None = None
 
+    google_calendar_client_id: str = ""
+    google_calendar_client_secret: SecretStr | None = None
+    google_calendar_redirect_uri: str = ""
+    google_calendar_token_key: SecretStr | None = None
+
     @property
     def cors_origins(self) -> list[str]:
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
